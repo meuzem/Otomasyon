@@ -45,7 +45,9 @@ import {
   Trash2,
   Search,
   Filter,
-  AlertCircle
+  AlertCircle,
+  Menu, 
+  Users
 } from 'lucide-react';
 
 // --- ChartJS Registration ---
@@ -69,10 +71,10 @@ const appId = 'uzem-takip-prod-v1';
 
 // --- Sabitler ve Listeler ---
 const ROLES = {
-  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', access: ['dashboard', 'education', 'filming', 'editing', 'calendar'] },
+  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
   FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', access: ['filming', 'calendar'] },
   EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', access: ['editing'] },
-  ADMIN: { id: 'admin', name: 'Yönetici', pass: 'admin2025', access: ['dashboard', 'education', 'filming', 'editing', 'calendar'] }
+  ADMIN: { id: 'admin', name: 'Yönetici', pass: 'admin2025', access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
 };
 
 const LOOKUPS = {
@@ -98,15 +100,15 @@ const LOOKUPS = {
   ],
   MONTAJ_SORUMLUSU: ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yürük', 'Cihan Çimen'],
   CEKIM_SORUMLUSU: ['Gülnur Kılıç', 'Sadi Demirci', 'Soner Ulu'],
-  // Multiselect için seçenekler
   CEKIM_YAPANLAR_LISTESI: ['Gülnur Kılıç', 'Sadi Demirci', 'Soner Ulu'],
   EVET_HAYIR: ['Yapıldı', 'Yapılmadı'],
   CEKIM_DURUMU: ['Başladı', 'Devam Ediyor', 'Tekrar Çekim', 'Bitti'],
-  // 'Başladı' seçeneği kaldırıldı
   MONTAJ_DURUMU: ['Devam Ediyor', '1.Revize', '2.Revize', 'Bitti'],
-  TAMAMLANDI_DURUMU: ['Tamamlandı', 'Tamamlanmadı'],
   ICERIK_UZMANI: ['Arzu Mantar', 'Meltem Ermez', 'Nezahat Kara', 'Sevim Aydın Verim'],
-  SYNOLOGY_DURUMU: ['Kaydedildi', 'Kaydedilmedi']
+  SYNOLOGY_DURUMU: ['Kaydedildi', 'Kaydedilmedi'],
+  EGITIM_TASARIM_UZMANI: ['Başak Erkoç', 'Elif Nur Çonak', 'Emine Aytekin', 'Erdem Çevik', 'Umut Meral', 'Zehra Tüfenkçi'],
+  CALISMA_GUNLERI: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'],
+  CALISMA_SAATLERI: ['08:30 – 17:00', '09:00 – 16:00', '08:30 – 12:00', '12:40 -17:00', '13:00 -16:30', '13:00 – 17:00']
 };
 
 // --- Yardımcı Fonksiyonlar ---
@@ -142,7 +144,6 @@ const formatDate = (dateString) => {
 
 // --- Bileşenler ---
 
-// 1. Login Component
 const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -162,7 +163,6 @@ const Login = ({ onLogin }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-             {/* Logo Kullanımı - public/logo.png yolunu kullanır */}
              <img src="/logo.png" alt="İBB Logo" className="h-24 object-contain" onError={(e) => {e.target.onerror = null; e.target.src="https://placehold.co/100x100?text=Logo"}} />
           </div>
           <h1 className="text-2xl font-bold text-gray-800">UZEM Eğitim Takip Sistemi</h1>
@@ -187,16 +187,11 @@ const Login = ({ onLogin }) => {
             Giriş Yap
           </button>
         </form>
-        {/* Şifreler gizlendi */}
-        <div className="mt-6 text-xs text-center text-gray-400">
-          Eİİ UZEM &copy; 2025
-        </div>
       </div>
     </div>
   );
 };
 
-// 2. Generic Table Component
 const DataTable = ({ 
   title, 
   columns, 
@@ -253,9 +248,7 @@ const DataTable = ({
         </select>
       );
     } else if (col.type === 'multiselect') {
-        // Multiselect Mantığı (Checkbox listesi olarak)
         const currentVals = form[col.key] ? (Array.isArray(form[col.key]) ? form[col.key] : form[col.key].split(', ')) : [];
-        
         const handleCheck = (opt) => {
             let newVals;
             if (currentVals.includes(opt)) {
@@ -263,10 +256,8 @@ const DataTable = ({
             } else {
                 newVals = [...currentVals, opt];
             }
-            // Veritabanına string olarak kaydetmek daha kolay (virgülle ayrılmış)
             setForm({ ...form, [col.key]: newVals.join(', ') });
         };
-
         return (
             <div className="w-full p-2 border rounded text-sm max-h-32 overflow-y-auto bg-white shadow-sm">
                 {col.options.map(opt => (
@@ -435,7 +426,9 @@ const EducationPage = ({ currentUser }) => {
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id), form);
   };
   const handleDelete = async (id) => {
-    if(confirm('Silmek istediğinize emin misiniz?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id));
+    if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id));
+    }
   };
 
   return (
@@ -458,7 +451,6 @@ const FilmingPage = ({ currentUser }) => {
     { key: 'egitmen', label: 'Eğitmen Adı Soyadı' },
     { key: 'cekimSorumlusu', label: 'Çekim Sorumlusu', type: 'select', options: LOOKUPS.CEKIM_SORUMLUSU },
     { key: 'isikSorumlusu', label: 'Işık Sorumlusu', type: 'select', options: LOOKUPS.CEKIM_SORUMLUSU },
-    // videoAdi ve Video Synology Adı kaldırıldı
     { key: 'cekimBaslama', label: 'Çekim Başlama', type: 'date' },
     { key: 'onCekim', label: 'Ön Çekim', type: 'select', options: LOOKUPS.EVET_HAYIR },
     { key: 'onCekimTarihi', label: 'Ön Çekim Tarihi', type: 'date' },
@@ -477,7 +469,6 @@ const FilmingPage = ({ currentUser }) => {
     { key: 'cekimTamam', label: 'Çekim', type: 'select', options: LOOKUPS.TAMAMLANDI_DURUMU },
     { key: 'synology', label: 'Synology', type: 'select', options: LOOKUPS.SYNOLOGY_DURUMU },
     { key: 'synologyKlasor', label: 'Synology Klasör Adı' },
-    // çekim yapanlar multiselect olarak güncellendi
     { key: 'cekimYapanlar', label: 'Çekim Yapanlar', type: 'multiselect', options: LOOKUPS.CEKIM_YAPANLAR_LISTESI },
     { key: 'notlar', label: 'Ek Notlar' },
   ];
@@ -504,7 +495,9 @@ const FilmingPage = ({ currentUser }) => {
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id), form);
   };
   const handleDelete = async (id) => {
-    if(confirm('Silmek istediğinize emin misiniz?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id));
+    if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id));
+    }
   };
 
   return (
@@ -526,14 +519,12 @@ const EditingPage = ({ currentUser }) => {
     { key: 'egitimAdi', label: 'Eğitim Adı' },
     { key: 'egitmen', label: 'Eğitmen Adı Soyadı' },
     { key: 'montajSorumlusu', label: 'Montaj Sorumlusu', type: 'select', options: LOOKUPS.MONTAJ_SORUMLUSU },
-    // Biten Video Adı kaldırıldı
     { key: 'icerikUzmani', label: 'İçerik Uzmanı', type: 'select', options: LOOKUPS.ICERIK_UZMANI },
     { key: 'montajBaslama', label: 'Montaj Başlama', type: 'date' },
     { key: 'revize1', label: '1. Revize Tarihi', type: 'date' },
     { key: 'revize2', label: '2. Revize Tarihi', type: 'date' },
     { key: 'montajDurumu', label: 'Montaj Durumu', type: 'select', options: LOOKUPS.MONTAJ_DURUMU },
     { key: 'montajBitis', label: 'Montaj Bitiş', type: 'date' },
-    // Montaj (Tamamlandı) kaldırıldı
     { key: 'notlar', label: 'Ek Notlar' },
   ];
 
@@ -559,7 +550,9 @@ const EditingPage = ({ currentUser }) => {
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id), form);
   };
   const handleDelete = async (id) => {
-    if(confirm('Silmek istediğinize emin misiniz?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id));
+    if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id));
+    }
   };
 
   return (
@@ -573,6 +566,51 @@ const EditingPage = ({ currentUser }) => {
       customRowClass={(row) => row.montajDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
     />
   );
+};
+
+const InstructorPage = ({ currentUser }) => {
+    const [data, setData] = useState([]);
+    const cols = [
+        { key: 'egitmen', label: 'Eğitmen' },
+        { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN },
+        { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
+        { key: 'calismaGunu', label: 'Çalışma Günü', type: 'multiselect', options: LOOKUPS.CALISMA_GUNLERI },
+        { key: 'calismaSaati', label: 'Çalışma Saati', type: 'select', options: LOOKUPS.CALISMA_SAATLERI },
+        { key: 'icerikGelistirme', label: 'İçerik Geliştirme Uzmanı', type: 'select', options: LOOKUPS.ICERIK_TAKIP },
+        { key: 'egitimTasarim', label: 'Eğitim Tasarım Uzmanı', type: 'select', options: LOOKUPS.EGITIM_TASARIM_UZMANI }
+    ];
+
+    useEffect(() => {
+        if (!currentUser) return;
+        const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'instructor_management'), orderBy('createdAt', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (err) => console.error("Instructor fetch error:", err));
+        return () => unsub();
+    }, [currentUser]);
+
+    const handleAdd = async (form) => {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'instructor_management'), { ...form, createdAt: serverTimestamp() });
+    };
+    const handleUpdate = async (id, form) => {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'instructor_management', id), form);
+    };
+    const handleDelete = async (id) => {
+        if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'instructor_management', id));
+        }
+    };
+
+    return (
+        <DataTable
+            title="Eğitmen Yönetimi"
+            columns={cols}
+            data={data}
+            onAdd={handleAdd}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+        />
+    );
 };
 
 const CalendarPage = () => (
@@ -592,23 +630,21 @@ const CalendarPage = () => (
 
 const DashboardPage = ({ currentUser }) => {
   const [eduData, setEduData] = useState([]);
-  const [filmData, setFilmData] = useState([]);
   const [editData, setEditData] = useState([]);
 
   useEffect(() => {
     if (!currentUser) return; 
-    const unsub1 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), s => setEduData(s.docs.map(d=>d.data())), e => console.log('Dash Error 1', e));
-    const unsub2 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'filming_tracking'), s => setFilmData(s.docs.map(d=>d.data())), e => console.log('Dash Error 2', e));
-    const unsub3 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'editing_tracking'), s => setEditData(s.docs.map(d=>d.data())), e => console.log('Dash Error 3', e));
-    return () => { unsub1(); unsub2(); unsub3(); };
+    const unsub1 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), s => setEduData(s.docs.map(d=>d.data())));
+    const unsub2 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'editing_tracking'), s => setEditData(s.docs.map(d=>d.data())));
+    return () => { unsub1(); unsub2(); };
   }, [currentUser]);
 
-  // Dashboard verilerini tablolara göre güncelle
+  // Dashboard Verilerini Hesapla
   const inFilming = eduData.filter(d => d.durum === 'Çekimde' || d.durum === 'Ekran Çekiminde' || d.durum === 'Ses Çekimi Bekleniyor' || d.durum === 'Çekim Bekliyor').length;
-  const inEditing = eduData.filter(d => d.durum === 'Montajda' || d.durum === 'Montaj Sırasında' || d.durum === 'Montaj Kontrolü' || d.durum === 'Montaj Revize').length;
-  const published = eduData.filter(d => d.durum === 'Yayında').length;
+  // Montaj: Montaj Takip Tablosundan - Bitti olmayanlar
+  const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   
-  // Hazırlanan Eğitim: Yayında, Eğitim Beklemede ve İptal hariç hepsi
+  const published = eduData.filter(d => d.durum === 'Yayında').length;
   const hazirlanan = eduData.filter(d => d.durum !== 'Yayında' && d.durum !== 'Eğitim Beklemede' && d.durum !== 'İptal').length;
 
   const eduStatusCounts = eduData.reduce((acc, curr) => {
@@ -679,34 +715,19 @@ export default function App() {
   const [userRole, setUserRole] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
-
     const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Auth Hatası:", error);
-        if (isMounted) setAuthError("Bağlantı hatası. Lütfen internetinizi kontrol edin.");
-      }
+      try { await signInAnonymously(auth); } 
+      catch (error) { if (isMounted) setAuthError("Bağlantı hatası. İnternet bağlantınızı kontrol edin."); }
     };
-    
     initAuth();
-    
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (isMounted) {
-        setFirebaseUser(u);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsub();
-    };
+    const unsub = onAuthStateChanged(auth, (u) => { if (isMounted) { setFirebaseUser(u); setLoading(false); } });
+    return () => { isMounted = false; unsub(); };
   }, []);
 
   const handleLogin = (roleObj) => {
@@ -716,25 +737,10 @@ export default function App() {
     else setActiveTab('dashboard');
   };
 
-  const handleLogout = async () => {
-    setUserRole(null);
-  };
+  const handleLogout = async () => { setUserRole(null); };
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center text-indigo-600 bg-gray-50">
-       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-       <div>Sistem Bağlanıyor...</div>
-    </div>
-  );
-
-  if (authError) return (
-    <div className="h-screen flex flex-col items-center justify-center text-red-600 bg-gray-50 p-4 text-center">
-       <AlertCircle className="w-12 h-12 mb-2 mx-auto" /> 
-       <div className="font-bold text-lg">Bağlantı Hatası</div>
-       <div>{authError}</div>
-    </div>
-  );
-
+  if (loading) return <div className="h-screen flex items-center justify-center text-indigo-600">Yükleniyor...</div>;
+  if (authError) return <div className="h-screen flex items-center justify-center text-red-600">{authError}</div>;
   if (!userRole) return <Login onLogin={handleLogin} />;
 
   const menuItems = [
@@ -743,24 +749,39 @@ export default function App() {
     { id: 'filming', label: 'Çekim Takip', icon: <Video size={20}/> },
     { id: 'editing', label: 'Montaj Takip', icon: <Scissors size={20}/> },
     { id: 'calendar', label: 'Çekim Takvimi', icon: <Calendar size={20}/> },
+    { id: 'instructors', label: 'Eğitmen Yönetimi', icon: <Users size={20}/> },
   ];
 
   const allowedMenu = menuItems.filter(item => userRole.access.includes(item.id));
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
-      <div className="w-64 bg-slate-900 text-white flex flex-col flex-shrink-0 shadow-xl z-20">
-        <div className="p-6 border-b border-slate-800">
-          {/* İSTEK: Sol Üst Başlık Değişikliği */}
-          <h1 className="text-xl font-bold tracking-tight">Eİİ <span className="text-indigo-400">UZEM</span></h1>
-          <p className="text-xs text-slate-400 mt-1">Panel</p>
+    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden relative">
+      
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      <div className={`
+        fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white flex flex-col shadow-xl transform transition-transform duration-300 ease-in-out
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:relative md:translate-x-0
+      `}>
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Eİİ <span className="text-indigo-400">UZEM</span></h1>
+            <p className="text-xs text-slate-400 mt-1">Panel</p>
+          </div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400"><X size={20}/></button>
         </div>
         
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {allowedMenu.map(item => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                 activeTab === item.id 
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' 
@@ -788,21 +809,27 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="bg-white h-16 border-b border-gray-200 flex items-center justify-between px-8 flex-shrink-0">
-          <h2 className="text-xl font-semibold text-gray-800">
-            {menuItems.find(m => m.id === activeTab)?.label}
-          </h2>
-          <div className="text-sm text-gray-500">
+        <header className="bg-white h-16 border-b border-gray-200 flex items-center justify-between px-4 md:px-8 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+              <Menu size={24} />
+            </button>
+            <h2 className="text-xl font-semibold text-gray-800">
+              {menuItems.find(m => m.id === activeTab)?.label}
+            </h2>
+          </div>
+          <div className="text-sm text-gray-500 hidden sm:block">
              {new Date().toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-hidden flex flex-col">
+        <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
           {activeTab === 'dashboard' && <div className="h-full overflow-y-auto custom-scrollbar"><DashboardPage currentUser={firebaseUser} /></div>}
           {activeTab === 'education' && <EducationPage currentUser={firebaseUser} />}
           {activeTab === 'filming' && <FilmingPage currentUser={firebaseUser} />}
           {activeTab === 'editing' && <EditingPage currentUser={firebaseUser} />}
           {activeTab === 'calendar' && <CalendarPage />}
+          {activeTab === 'instructors' && <InstructorPage currentUser={firebaseUser} />}
         </main>
       </div>
     </div>
