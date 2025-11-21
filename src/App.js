@@ -71,10 +71,16 @@ const appId = 'uzem-takip-prod-v1';
 
 // --- Sabitler ve Listeler ---
 const ROLES = {
-  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
-  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', access: ['filming'] }, // Sadece Çekim Takip sayfasına erişim
-  EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', access: ['editing'] },
-  ADMIN: { id: 'admin', name: 'Yönetici', pass: 'admin2025', access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
+  // canEdit: true -> Düzenleme yapabilir, false -> Sadece görür
+  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
+  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', canEdit: true, access: ['filming'] },
+  EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', canEdit: true, access: ['editing'] },
+  
+  // Admin: Sadece Gözlemci (Excel ve Düzenleme Kapalı)
+  ADMIN: { id: 'admin', name: 'Admin', pass: 'admin2025', canEdit: false, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
+  
+  // Yönetici: Tam Yetki
+  MANAGER: { id: 'manager', name: 'Yönetici', pass: 'uzemyonetici', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
 };
 
 const LOOKUPS = {
@@ -192,6 +198,7 @@ const Login = ({ onLogin }) => {
   );
 };
 
+// Tablo Bileşeni
 const DataTable = ({ 
   title, 
   columns, 
@@ -199,7 +206,8 @@ const DataTable = ({
   onAdd, 
   onUpdate, 
   onDelete, 
-  customRowClass
+  customRowClass,
+  canEdit = true // Varsayılan olarak true
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(null); 
@@ -312,12 +320,20 @@ const DataTable = ({
               className="pl-9 pr-4 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500 outline-none w-48 md:w-64"
             />
           </div>
-          <button onClick={() => exportToExcel(filteredData, title)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">
-            <Download size={16} /> Excel
-          </button>
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors">
-            <Plus size={16} /> Yeni Ekle
-          </button>
+          
+          {/* Yetki Kontrolü: Admin ise Excel Butonu GÖRÜNMEZ */}
+          {canEdit && (
+            <button onClick={() => exportToExcel(filteredData, title)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">
+                <Download size={16} /> Excel
+            </button>
+          )}
+          
+          {/* Yetki Kontrolü: Sadece canEdit=true ise 'Yeni Ekle' butonu görünür */}
+          {canEdit && (
+            <button onClick={() => setIsAdding(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors">
+                <Plus size={16} /> Yeni Ekle
+            </button>
+          )}
         </div>
       </div>
 
@@ -331,11 +347,12 @@ const DataTable = ({
                   {col.label}
                 </th>
               ))}
-              <th className="p-3 border-b font-semibold w-24 text-center bg-gray-100 sticky right-0 shadow-l">İşlemler</th>
+              {/* Yetki Kontrolü: Sadece canEdit=true ise 'İşlemler' sütunu görünür */}
+              {canEdit && <th className="p-3 border-b font-semibold w-24 text-center bg-gray-100 sticky right-0 shadow-l">İşlemler</th>}
             </tr>
           </thead>
           <tbody>
-            {isAdding && (
+            {isAdding && canEdit && (
               <tr className="bg-indigo-50">
                 <td className="p-3 text-center"><Plus size={16} className="mx-auto text-indigo-500"/></td>
                 {columns.map(col => (
@@ -362,19 +379,22 @@ const DataTable = ({
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])}
                     </td>
                   ))}
-                  <td className="p-3 text-center sticky right-0 bg-inherit shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]">
-                    {isRowEditing ? (
-                      <div className="flex justify-center gap-1">
-                        <button onClick={handleSave} className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700"><Save size={14}/></button>
-                        <button onClick={() => setIsEditing(null)} className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500"><X size={14}/></button>
-                      </div>
-                    ) : (
-                      <div className="flex justify-center gap-1">
-                        <button onClick={() => handleEditClick(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 size={16}/></button>
-                        <button onClick={() => onDelete(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={16}/></button>
-                      </div>
-                    )}
-                  </td>
+                  {/* Yetki Kontrolü: Sadece canEdit=true ise butonlar görünür */}
+                  {canEdit && (
+                    <td className="p-3 text-center sticky right-0 bg-inherit shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]">
+                        {isRowEditing ? (
+                        <div className="flex justify-center gap-1">
+                            <button onClick={handleSave} className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700"><Save size={14}/></button>
+                            <button onClick={() => setIsEditing(null)} className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500"><X size={14}/></button>
+                        </div>
+                        ) : (
+                        <div className="flex justify-center gap-1">
+                            <button onClick={() => handleEditClick(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 size={16}/></button>
+                            <button onClick={() => onDelete(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                        )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -397,7 +417,6 @@ const EducationPage = ({ currentUser }) => {
     { key: 'icerikTakip', label: 'İçerik Takip', type: 'select', options: LOOKUPS.ICERIK_TAKIP },
     { key: 'durum', label: 'Durum', type: 'select', options: LOOKUPS.DURUM_GENEL },
     { key: 'icerikBaslama', label: 'İçerik Başlama', type: 'date' },
-    // Çekim Başlama, Montaj Başlama, Montaj Sorumlusu kaldırıldı
     { key: 'yayinTarihi', label: 'Yayın Tarihi', type: 'date' },
     { key: 'notlar', label: 'Notlar' },
   ];
@@ -438,6 +457,7 @@ const EducationPage = ({ currentUser }) => {
       onUpdate={handleUpdate}
       onDelete={handleDelete}
       customRowClass={(row) => row.durum === 'Yayında' ? 'bg-green-50 border-green-200' : ''}
+      canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
     />
   );
 };
@@ -507,6 +527,7 @@ const FilmingPage = ({ currentUser }) => {
       onUpdate={handleUpdate}
       onDelete={handleDelete}
       customRowClass={(row) => row.cekimDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
+      canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
     />
   );
 };
@@ -562,6 +583,7 @@ const EditingPage = ({ currentUser }) => {
       onUpdate={handleUpdate}
       onDelete={handleDelete}
       customRowClass={(row) => row.montajDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
+      canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
     />
   );
 };
@@ -607,6 +629,7 @@ const InstructorPage = ({ currentUser }) => {
             onAdd={handleAdd}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
+            canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
         />
     );
 };
@@ -617,7 +640,11 @@ const CalendarPage = () => (
       <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
     </h2>
     <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden border border-gray-300">
-      <iframe src="https://meuzem.github.io/uzem_studyo/" className="w-full h-full border-0" title="Studio Calendar" />
+      <iframe 
+        src="https://meuzem.github.io/uzem_studyo/"
+        className="w-full h-full border-0"
+        title="Studio Calendar"
+      />
     </div>
   </div>
 );
@@ -816,12 +843,13 @@ export default function App() {
         </header>
 
         <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
-          {activeTab === 'dashboard' && <div className="h-full overflow-y-auto custom-scrollbar"><DashboardPage currentUser={firebaseUser} /></div>}
-          {activeTab === 'education' && <EducationPage currentUser={firebaseUser} />}
-          {activeTab === 'filming' && <FilmingPage currentUser={firebaseUser} />}
-          {activeTab === 'editing' && <EditingPage currentUser={firebaseUser} />}
+          {/* Burada currentUser={userRole} gönderiyoruz ki yetkiler sayfaya geçsin */}
+          {activeTab === 'dashboard' && <div className="h-full overflow-y-auto custom-scrollbar"><DashboardPage currentUser={userRole} /></div>}
+          {activeTab === 'education' && <EducationPage currentUser={userRole} />}
+          {activeTab === 'filming' && <FilmingPage currentUser={userRole} />}
+          {activeTab === 'editing' && <EditingPage currentUser={userRole} />}
           {activeTab === 'calendar' && <CalendarPage />}
-          {activeTab === 'instructors' && <InstructorPage currentUser={firebaseUser} />}
+          {activeTab === 'instructors' && <InstructorPage currentUser={userRole} />}
         </main>
       </div>
     </div>
