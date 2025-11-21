@@ -72,7 +72,7 @@ const appId = 'uzem-takip-prod-v1';
 // --- Sabitler ve Listeler ---
 const ROLES = {
   EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
-  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', access: ['filming', 'calendar'] },
+  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', access: ['filming'] }, // Sadece Çekim Takip sayfasına erişim
   EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', access: ['editing'] },
   ADMIN: { id: 'admin', name: 'Yönetici', pass: 'admin2025', access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
 };
@@ -242,7 +242,7 @@ const DataTable = ({
           className="w-full p-1 border rounded text-sm"
         >
           <option value="">Seçiniz</option>
-          {col.options.map(opt => (
+          {(col.options || []).map(opt => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
@@ -260,7 +260,7 @@ const DataTable = ({
         };
         return (
             <div className="w-full p-2 border rounded text-sm max-h-32 overflow-y-auto bg-white shadow-sm">
-                {col.options.map(opt => (
+                {(col.options || []).map(opt => (
                     <label key={opt} className="flex items-center gap-2 mb-1 cursor-pointer hover:bg-gray-50 p-1 rounded">
                         <input 
                             type="checkbox" 
@@ -397,9 +397,7 @@ const EducationPage = ({ currentUser }) => {
     { key: 'icerikTakip', label: 'İçerik Takip', type: 'select', options: LOOKUPS.ICERIK_TAKIP },
     { key: 'durum', label: 'Durum', type: 'select', options: LOOKUPS.DURUM_GENEL },
     { key: 'icerikBaslama', label: 'İçerik Başlama', type: 'date' },
-    { key: 'cekimBaslama', label: 'Çekim Başlama', type: 'date' },
-    { key: 'montajBaslama', label: 'Montaj Başlama', type: 'date' },
-    { key: 'montajSorumlusu', label: 'Montaj Sorumlusu', type: 'select', options: LOOKUPS.MONTAJ_SORUMLUSU },
+    // Çekim Başlama, Montaj Başlama, Montaj Sorumlusu kaldırıldı
     { key: 'yayinTarihi', label: 'Yayın Tarihi', type: 'date' },
     { key: 'notlar', label: 'Notlar' },
   ];
@@ -572,8 +570,8 @@ const InstructorPage = ({ currentUser }) => {
     const [data, setData] = useState([]);
     const cols = [
         { key: 'egitmen', label: 'Eğitmen' },
-        { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN },
         { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
+        { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN },
         { key: 'calismaGunu', label: 'Çalışma Günü', type: 'multiselect', options: LOOKUPS.CALISMA_GUNLERI },
         { key: 'calismaSaati', label: 'Çalışma Saati', type: 'select', options: LOOKUPS.CALISMA_SAATLERI },
         { key: 'icerikGelistirme', label: 'İçerik Geliştirme Uzmanı', type: 'select', options: LOOKUPS.ICERIK_TAKIP },
@@ -619,11 +617,7 @@ const CalendarPage = () => (
       <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
     </h2>
     <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden border border-gray-300">
-      <iframe 
-        src="https://meuzem.github.io/uzem_studyo/"
-        className="w-full h-full border-0"
-        title="Studio Calendar"
-      />
+      <iframe src="https://meuzem.github.io/uzem_studyo/" className="w-full h-full border-0" title="Studio Calendar" />
     </div>
   </div>
 );
@@ -641,9 +635,7 @@ const DashboardPage = ({ currentUser }) => {
 
   // Dashboard Verilerini Hesapla
   const inFilming = eduData.filter(d => d.durum === 'Çekimde' || d.durum === 'Ekran Çekiminde' || d.durum === 'Ses Çekimi Bekleniyor' || d.durum === 'Çekim Bekliyor').length;
-  // Montaj: Montaj Takip Tablosundan - Bitti olmayanlar
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
-  
   const published = eduData.filter(d => d.durum === 'Yayında').length;
   const hazirlanan = eduData.filter(d => d.durum !== 'Yayında' && d.durum !== 'Eğitim Beklemede' && d.durum !== 'İptal').length;
 
