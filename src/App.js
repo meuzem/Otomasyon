@@ -47,8 +47,7 @@ import {
   Filter,
   AlertCircle,
   Menu, 
-  Users,
-  ArrowUpDown // Sıralama ikonu
+  Users
 } from 'lucide-react';
 
 // --- ChartJS Registration ---
@@ -170,8 +169,7 @@ const Login = ({ onLogin }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-import logo from "/src/assets/logo.png";          
-   <img src="/logo.png" alt="İBB Logo" className="h-24 object-contain" onError={(e) => {e.target.onerror = null; e.target.src="https://placehold.co/100x100?text=Logo"}} />
+             <img src="/logo.png" alt="İBB Logo" className="h-24 object-contain" onError={(e) => {e.target.onerror = null; e.target.src="https://placehold.co/100x100?text=Logo"}} />
           </div>
           <h1 className="text-2xl font-bold text-gray-800">UZEM Eğitim Takip Sistemi</h1>
           <p className="text-gray-500 mt-2">Yetkili Girişi</p>
@@ -200,6 +198,7 @@ import logo from "/src/assets/logo.png";
   );
 };
 
+// Tablo Bileşeni
 const DataTable = ({ 
   title, 
   columns, 
@@ -208,43 +207,23 @@ const DataTable = ({
   onUpdate, 
   onDelete, 
   customRowClass,
-  canEdit = true
+  canEdit = true // Varsayılan olarak true
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(null); 
   const [editForm, setEditForm] = useState({});
   const [isAdding, setIsAdding] = useState(false);
   const [addForm, setAddForm] = useState({});
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
-
-  const requestSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
 
   const filteredData = useMemo(() => {
-    let processedData = data;
-    if (searchTerm) {
-      const lowerTerm = searchTerm.toLowerCase();
-      processedData = processedData.filter(item => 
-        Object.values(item).some(val => 
-          String(val).toLowerCase().includes(lowerTerm)
-        )
-      );
-    }
-
-    if (sortConfig.key) {
-      processedData.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
-        return 0;
-      });
-    }
-    return processedData;
-  }, [data, searchTerm, sortConfig]);
+    if (!searchTerm) return data;
+    const lowerTerm = searchTerm.toLowerCase();
+    return data.filter(item => 
+      Object.values(item).some(val => 
+        String(val).toLowerCase().includes(lowerTerm)
+      )
+    );
+  }, [data, searchTerm]);
 
   const handleEditClick = (item) => {
     setIsEditing(item.id);
@@ -257,7 +236,6 @@ const DataTable = ({
   };
 
   const handleAddSubmit = async () => {
-    if (Object.keys(addForm).length === 0) return; 
     await onAdd(addForm);
     setAddForm({});
     setIsAdding(false);
@@ -343,12 +321,14 @@ const DataTable = ({
             />
           </div>
           
+          {/* Yetki Kontrolü: Admin ise Excel Butonu GÖRÜNMEZ */}
           {canEdit && (
             <button onClick={() => exportToExcel(filteredData, title)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">
                 <Download size={16} /> Excel
             </button>
           )}
           
+          {/* Yetki Kontrolü: Sadece canEdit=true ise 'Yeni Ekle' butonu görünür */}
           {canEdit && (
             <button onClick={() => setIsAdding(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors">
                 <Plus size={16} /> Yeni Ekle
@@ -363,17 +343,11 @@ const DataTable = ({
             <tr>
               <th className="p-3 border-b font-semibold w-12 text-center">#</th>
               {columns.map(col => (
-                <th 
-                  key={col.key} 
-                  className={`p-3 border-b font-semibold min-w-[120px] ${col.sortable ? 'cursor-pointer hover:bg-gray-200' : ''}`}
-                  onClick={() => col.sortable && requestSort(col.key)}
-                >
-                  <div className="flex items-center gap-1">
-                    {col.label}
-                    {col.sortable && <ArrowUpDown size={14} className="text-gray-400" />}
-                  </div>
+                <th key={col.key} className="p-3 border-b font-semibold min-w-[120px]">
+                  {col.label}
                 </th>
               ))}
+              {/* Yetki Kontrolü: Sadece canEdit=true ise 'İşlemler' sütunu görünür */}
               {canEdit && <th className="p-3 border-b font-semibold w-24 text-center bg-gray-100 sticky right-0 shadow-l">İşlemler</th>}
             </tr>
           </thead>
@@ -405,6 +379,7 @@ const DataTable = ({
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])}
                     </td>
                   ))}
+                  {/* Yetki Kontrolü: Sadece canEdit=true ise butonlar görünür */}
                   {canEdit && (
                     <td className="p-3 text-center sticky right-0 bg-inherit shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]">
                         {isRowEditing ? (
@@ -435,12 +410,12 @@ const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
   const cols = [
     { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
-    { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
+    { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN },
     { key: 'bolum', label: 'Bölüm' },
     { key: 'egitim', label: 'Eğitim' },
-    { key: 'egitmen', label: 'Eğitmen', sortable: true },
-    { key: 'icerikTakip', label: 'İçerik Takip', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
-    { key: 'durum', label: 'Durum', type: 'select', options: LOOKUPS.DURUM_GENEL, sortable: true },
+    { key: 'egitmen', label: 'Eğitmen' },
+    { key: 'icerikTakip', label: 'İçerik Takip', type: 'select', options: LOOKUPS.ICERIK_TAKIP },
+    { key: 'durum', label: 'Durum', type: 'select', options: LOOKUPS.DURUM_GENEL },
     { key: 'icerikBaslama', label: 'İçerik Başlama', type: 'date' },
     { key: 'yayinTarihi', label: 'Yayın Tarihi', type: 'date' },
     { key: 'notlar', label: 'Notlar' },
@@ -482,7 +457,7 @@ const EducationPage = ({ currentUser }) => {
       onUpdate={handleUpdate}
       onDelete={handleDelete}
       customRowClass={(row) => row.durum === 'Yayında' ? 'bg-green-50 border-green-200' : ''}
-      canEdit={currentUser.canEdit}
+      canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
     />
   );
 };
@@ -552,7 +527,7 @@ const FilmingPage = ({ currentUser }) => {
       onUpdate={handleUpdate}
       onDelete={handleDelete}
       customRowClass={(row) => row.cekimDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
-      canEdit={currentUser.canEdit}
+      canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
     />
   );
 };
@@ -608,7 +583,7 @@ const EditingPage = ({ currentUser }) => {
       onUpdate={handleUpdate}
       onDelete={handleDelete}
       customRowClass={(row) => row.montajDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
-      canEdit={currentUser.canEdit}
+      canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
     />
   );
 };
@@ -616,12 +591,12 @@ const EditingPage = ({ currentUser }) => {
 const InstructorPage = ({ currentUser }) => {
     const [data, setData] = useState([]);
     const cols = [
-        { key: 'egitmen', label: 'Eğitmen', sortable: true },
-        { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
+        { key: 'egitmen', label: 'Eğitmen' },
+        { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
+        { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN },
         { key: 'calismaGunu', label: 'Çalışma Günü', type: 'multiselect', options: LOOKUPS.CALISMA_GUNLERI },
         { key: 'calismaSaati', label: 'Çalışma Saati', type: 'select', options: LOOKUPS.CALISMA_SAATLERI },
-        { key: 'kursMerkezi', label: 'Kurs Merkezi' }, 
-        { key: 'icerikGelistirme', label: 'İçerik Geliştirme Uzmanı', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
+        { key: 'icerikGelistirme', label: 'İçerik Geliştirme Uzmanı', type: 'select', options: LOOKUPS.ICERIK_TAKIP },
         { key: 'egitimTasarim', label: 'Eğitim Tasarım Uzmanı', type: 'select', options: LOOKUPS.EGITIM_TASARIM_UZMANI }
     ];
 
@@ -654,7 +629,7 @@ const InstructorPage = ({ currentUser }) => {
             onAdd={handleAdd}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
-            canEdit={currentUser.canEdit}
+            canEdit={currentUser.canEdit} // Yetki bilgisi gönderiliyor
         />
     );
 };
@@ -880,4 +855,3 @@ export default function App() {
     </div>
   );
 }
-
