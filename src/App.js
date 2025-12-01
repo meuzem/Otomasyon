@@ -234,8 +234,35 @@ const DataTable = ({
 
     if (sortConfig.key) {
       processedData.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
+        // String karşılaştırması için güvenli dönüşüm
+        const valA = a[sortConfig.key] ? a[sortConfig.key].toString() : "";
+        const valB = b[sortConfig.key] ? b[sortConfig.key].toString() : "";
+
+        // --- ÖZEL SIRALAMA MANTIĞI (PINNED BOTTOM) ---
+        // Belirli durumlara sahip kayıtlar her zaman en altta kalsın
+        const isPinnedBottom = (row, key) => {
+            // Eğitim Takip: Durum 'Yayında' ise alta at
+            if (key === 'durum' && row.durum === 'Yayında') return true;
+            
+            // Çekim Takip: Çekim Durumu 'Bitti' ise alta at
+            if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
+            
+            // Montaj Takip: Montaj Durumu veya Sorumlusu sıralanırken, durumu 'Bitti' olanları alta at
+            if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
+            
+            return false;
+        };
+
+        const aPinned = isPinnedBottom(a, sortConfig.key);
+        const bPinned = isPinnedBottom(b, sortConfig.key);
+
+        // Eğer biri pinli ise, diğerinden sonra gelir (return 1)
+        if (aPinned && !bPinned) return 1; 
+        if (!aPinned && bPinned) return -1;
+        
+        // Normal sıralama (Alfabetik)
+        if (valA.toLowerCase() < valB.toLowerCase()) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (valA.toLowerCase() > valB.toLowerCase()) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
     }
@@ -449,7 +476,6 @@ const EducationPage = ({ currentUser }) => {
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
       // --- ADMİN KISITLAMASI ---
-      // Admin kullanıcısı 'Planlanıyor', 'Beklemede', 'İptal' olanları GÖREMEYECEK.
       if (currentUser.id === 'admin') {
          const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
          list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
@@ -502,7 +528,7 @@ const FilmingPage = ({ currentUser }) => {
     { key: 'onCekim', label: 'Ön Çekim', type: 'select', options: LOOKUPS.EVET_HAYIR },
     { key: 'onCekimTarihi', label: 'Ön Çekim Tarihi', type: 'date' },
     { key: 'izlence', label: 'İzlence (İçerik Uzm.)', type: 'select', options: LOOKUPS.ICERIK_UZMANI },
-    { key: 'cekimDurumu', label: 'Çekim Durumu', type: 'select', options: LOOKUPS.CEKIM_DURUMU },
+    { key: 'cekimDurumu', label: 'Çekim Durumu', type: 'select', options: LOOKUPS.CEKIM_DURUMU, sortable: true },
     { key: 'cekimBitis', label: 'Çekim Bitiş', type: 'date' },
     { key: 'fotoCekim', label: 'Foto Çekim', type: 'select', options: LOOKUPS.EVET_HAYIR },
     { key: 'fotoCekimYapan', label: 'Foto Çekim Yapan', type: 'select', options: LOOKUPS.CEKIM_SORUMLUSU },
@@ -566,12 +592,12 @@ const EditingPage = ({ currentUser }) => {
   const cols = [
     { key: 'egitimAdi', label: 'Eğitim Adı' },
     { key: 'egitmen', label: 'Eğitmen Adı Soyadı' },
-    { key: 'montajSorumlusu', label: 'Montaj Sorumlusu', type: 'select', options: LOOKUPS.MONTAJ_SORUMLUSU },
+    { key: 'montajSorumlusu', label: 'Montaj Sorumlusu', type: 'select', options: LOOKUPS.MONTAJ_SORUMLUSU, sortable: true },
     { key: 'icerikUzmani', label: 'İçerik Uzmanı', type: 'select', options: LOOKUPS.ICERIK_UZMANI },
     { key: 'montajBaslama', label: 'Montaj Başlama', type: 'date' },
     { key: 'revize1', label: '1. Revize Tarihi', type: 'date' },
     { key: 'revize2', label: '2. Revize Tarihi', type: 'date' },
-    { key: 'montajDurumu', label: 'Montaj Durumu', type: 'select', options: LOOKUPS.MONTAJ_DURUMU },
+    { key: 'montajDurumu', label: 'Montaj Durumu', type: 'select', options: LOOKUPS.MONTAJ_DURUMU, sortable: true },
     { key: 'montajBitis', label: 'Montaj Bitiş', type: 'date' },
     { key: 'notlar', label: 'Ek Notlar' },
   ];
@@ -700,14 +726,14 @@ const DashboardPage = ({ currentUser }) => {
   // Yayın: Durumu "Yayında" olanlar
   const published = eduData.filter(d => d.durum === 'Yayında').length;
   
-  // Hazırlanan Eğitim: Eğitim Takip tablosundaki Durum sütunundan aşağıdaki listeye uymayanlar hariç tutulur
-  const EXCLUDED_FROM_PREPARING = [
-    'Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal',
-    'Çekimde', 'Çekim Bitti', 'Çekim Revize',
-    'Montajda', 'Montaj Kontrolü', 'Montaj Revize',
-    'Yayında'
+  const PREPARING_STATUSES = [
+    'Eğitmen İçerik Hazırlıyor', 'Ekran Çekiminde',
+    'Etkileşimli İçerik Hazırlanıyor', 'Çekim Bekliyor', 'İçerik Bitti',
+    'Ses Çekimi Bekleniyor', 'İçerik Kontrolü', 'İçerik Revize',
+    'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'ID Bekliyor',
+    'Yayında', 'ÖYS Aşamasında', 'Animasyon Programı Bekliyor'
   ];
-  const hazirlanan = eduData.filter(d => !EXCLUDED_FROM_PREPARING.includes(d.durum)).length;
+  const hazirlanan = eduData.filter(d => PREPARING_STATUSES.includes(d.durum)).length;
 
   const eduStatusCounts = eduData.reduce((acc, curr) => {
     const s = curr.durum || 'Belirsiz';
