@@ -3,9 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInAnonymously, 
-  signInWithCustomToken,
-  onAuthStateChanged, 
-  signOut 
+  onAuthStateChanged
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -44,11 +42,10 @@ import {
   Edit2, 
   Trash2,
   Search,
-  Filter,
-  AlertCircle,
   Menu, 
   Users,
-  ArrowUpDown // Sıralama ikonu
+  ArrowUpDown,
+  AlertCircle
 } from 'lucide-react';
 
 // --- ChartJS Registration ---
@@ -170,7 +167,7 @@ const Login = ({ onLogin }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-   <img src="/logo.png" alt="İBB Logo" className="h-24 object-contain" onError={(e) => {e.target.onerror = null; e.target.src="https://placehold.co/100x100?text=Logo"}} />
+             <img src="/logo.png" alt="İBB Logo" className="h-24 object-contain" onError={(e) => {e.target.onerror = null; e.target.src="https://placehold.co/100x100?text=Logo"}} />
           </div>
           <h1 className="text-2xl font-bold text-gray-800">UZEM Eğitim Takip Sistemi</h1>
           <p className="text-gray-500 mt-2">Yetkili Girişi</p>
@@ -450,6 +447,14 @@ const EducationPage = ({ currentUser }) => {
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      // --- ADMİN KISITLAMASI ---
+      // Admin kullanıcısı 'Planlanıyor', 'Beklemede', 'İptal' olanları GÖREMEYECEK.
+      if (currentUser.id === 'admin') {
+         const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
+         list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
+      }
+      
       list.sort((a, b) => {
         if (a.durum === 'Yayında' && b.durum !== 'Yayında') return 1;
         if (a.durum !== 'Yayında' && b.durum === 'Yayında') return -1;
@@ -617,6 +622,7 @@ const InstructorPage = ({ currentUser }) => {
     const cols = [
         { key: 'egitmen', label: 'Eğitmen', sortable: true },
         { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
+        // Dal Kaldırıldı, Kurs Merkezi Eklendi
         { key: 'calismaGunu', label: 'Çalışma Günü', type: 'multiselect', options: LOOKUPS.CALISMA_GUNLERI },
         { key: 'calismaSaati', label: 'Çalışma Saati', type: 'select', options: LOOKUPS.CALISMA_SAATLERI },
         { key: 'kursMerkezi', label: 'Kurs Merkezi' }, 
@@ -675,20 +681,33 @@ const CalendarPage = () => (
 
 const DashboardPage = ({ currentUser }) => {
   const [eduData, setEduData] = useState([]);
+  const [filmData, setFilmData] = useState([]);
   const [editData, setEditData] = useState([]);
 
   useEffect(() => {
     if (!currentUser) return; 
     const unsub1 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), s => setEduData(s.docs.map(d=>d.data())));
-    const unsub2 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'editing_tracking'), s => setEditData(s.docs.map(d=>d.data())));
-    return () => { unsub1(); unsub2(); };
+    const unsub2 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'filming_tracking'), s => setFilmData(s.docs.map(d=>d.data())));
+    const unsub3 = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'editing_tracking'), s => setEditData(s.docs.map(d=>d.data())));
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
   // Dashboard Verilerini Hesapla
-  const inFilming = eduData.filter(d => d.durum === 'Çekimde' || d.durum === 'Ekran Çekiminde' || d.durum === 'Ses Çekimi Bekleniyor' || d.durum === 'Çekim Bekliyor').length;
+  // Çekim: Çekim Durumu "Bitti" olmayanlar
+  const inFilming = filmData.filter(d => d.cekimDurumu !== 'Bitti').length;
+  // Montaj: Montaj Durumu "Bitti" olmayanlar
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
+  // Yayın: Durumu "Yayında" olanlar
   const published = eduData.filter(d => d.durum === 'Yayında').length;
-  const hazirlanan = eduData.filter(d => d.durum !== 'Yayında' && d.durum !== 'Eğitim Beklemede' && d.durum !== 'İptal').length;
+  
+  // Hazırlanan Eğitim: Eğitim Takip tablosundaki Durum sütunundan aşağıdaki listeye uymayanlar hariç tutulur
+  const EXCLUDED_FROM_PREPARING = [
+    'Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal',
+    'Çekimde', 'Çekim Bitti', 'Çekim Revize',
+    'Montajda', 'Montaj Kontrolü', 'Montaj Revize',
+    'Yayında'
+  ];
+  const hazirlanan = eduData.filter(d => !EXCLUDED_FROM_PREPARING.includes(d.durum)).length;
 
   const eduStatusCounts = eduData.reduce((acc, curr) => {
     const s = curr.durum || 'Belirsiz';
@@ -879,4 +898,3 @@ export default function App() {
     </div>
   );
 }
-
