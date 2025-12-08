@@ -1,0 +1,36 @@
+name: Deploy React App to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main  # main branch'e push yapınca çalışacak
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Repo'yu checkout et
+      - uses: actions/checkout@v4
+
+      # Node.js kur
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      # Bağımlılıkları kur
+      - name: Install dependencies
+        run: npm ci
+
+      # React projesini build et
+      - name: Build
+        run: npm run build
+
+      # Firebase Hosting deploy
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: uzem-takip
+          channelId: live
