@@ -1,14 +1,3 @@
-Harika bir güncelleme! İstediğiniz tüm bu yeni özellikleri ve yetki kısıtlamalarını `App.jsx` dosyasına entegre ettim.
-
-Yapılan değişikliklerin özeti:
-
-1. **Silme Onay Sistemi:** `Çekim Takip` ve `Montaj Takip` kullanıcıları artık kayıtları doğrudan silemezler. Sil (Çöp Kutusu) butonuna bastıklarında, o kayıt "Silme Bekliyor" durumuna (kırmızı renk) geçer. `Eğitim Takip` (veya Yönetici) yetkisiyle giren kullanıcılar bu sayfalara girip kırmızı ile işaretlenmiş bu talepleri görebilir, onaylayıp silebilir veya reddedip geri alabilir.
-2. **Modül Adı:** Çekim Takip tablosuna Eğitim Adı'ndan hemen sonra gelecek şekilde "Modül Adı" sütunu eklendi.
-3. **Otomatik İşlem Tarihi:** Çekim ve Montaj tablolarının en sonuna "İşlem Tarihi" sütunu eklendi. Kullanıcılar bir kayıt eklediğinde veya düzenlediğinde sistem o anki tarih ve saati otomatik atar, form üzerinden elle değiştirilemez (sadece okunabilir).
-
-Aşağıdaki güncellenmiş kodu `src/App.jsx` dosyanıza yapıştırarak kullanabilirsiniz:
-
-```jsx:src/App.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
