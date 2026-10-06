@@ -70,7 +70,7 @@ const appId = 'uzem-takip-prod-v1';
 // --- Sabitler ve Listeler ---
 const ROLES = {
   // canEdit: true -> Düzenleme yapabilir, false -> Sadece görür
-  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
+  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'no6-7', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
   FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', canEdit: true, access: ['filming'] },
   EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', canEdit: true, access: ['editing'] },
   
