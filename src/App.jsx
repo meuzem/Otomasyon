@@ -71,8 +71,8 @@ const appId = 'uzem-takip-prod-v1';
 const ROLES = {
   // canEdit: true -> Düzenleme yapabilir, false -> Sadece görür
   EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'no6-7', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
-  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', canEdit: true, access: ['filming'] },
-  EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', canEdit: true, access: ['editing'] },
+  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'ct123', canEdit: true, access: ['filming'] },
+  EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'mt987', canEdit: true, access: ['editing'] },
   
   // Admin: Sadece Gözlemci (Excel ve Düzenleme Kapalı)
   ADMIN: { id: 'admin', name: 'Admin', pass: 'admin2025', canEdit: false, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
