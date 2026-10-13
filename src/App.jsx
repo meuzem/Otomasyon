@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInAnonymously, 
-  onAuthStateChanged 
+  onAuthStateChanged
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -40,13 +40,12 @@ import {
   Save, 
   X, 
   Edit2, 
-  Trash2, 
-  Search, 
+  Trash2,
+  Search,
   Menu, 
-  Users, 
-  ArrowUpDown, 
-  AlertCircle,
-  Check
+  Users,
+  ArrowUpDown,
+  AlertCircle
 } from 'lucide-react';
 
 // --- ChartJS Registration ---
@@ -70,25 +69,27 @@ const appId = 'uzem-takip-prod-v1';
 
 // --- Sabitler ve Listeler ---
 const ROLES = {
-  // canEdit: true -> Düzenleme yapabilir, canDelete: true -> Silme işlemini yapabilir / onaylayabilir
-  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'no6-7', canEdit: true, canDelete: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
-  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'ct123', canEdit: true, canDelete: false, access: ['filming'] },
-  EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'mt987', canEdit: true, canDelete: false, access: ['editing'] },
+  // canEdit: true -> Düzenleme yapabilir, false -> Sadece görür
+  EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'egitim', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
+  FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'c1t2', canEdit: true, access: ['filming', 'calendar'] }, // calendar yetkisi eklendi
+  EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'm9t8', canEdit: true, access: ['editing'] },
+  
   // Admin: Sadece Gözlemci (Excel ve Düzenleme Kapalı)
-  ADMIN: { id: 'admin', name: 'Admin', pass: 'admin2025', canEdit: false, canDelete: false, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
+  ADMIN: { id: 'admin', name: 'Admin', pass: 'admin2025', canEdit: false, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
+  
   // Yönetici: Tam Yetki
-  MANAGER: { id: 'manager', name: 'Yönetici', pass: 'uzemyonetici', canEdit: true, canDelete: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
+  MANAGER: { id: 'manager', name: 'Yönetici', pass: 'uzemyonetici', canEdit: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
 };
 
 const LOOKUPS = {
   DAL: ['Mesleki ve Teknik', 'Kişisel Gelişim', 'Güzel Sanatlar', 'El Sanatları ve Zanaat'],
   ALAN: [
-    'Bilişim Teknolojileri', 'Çocuk Gelişimi ve Eğitimi', 'Dil Eğitimleri', 'İş ve İşleme Sanatları',
+    'Bilişim Teknolojileri', 'Çocuk Gelişimi ve Eğitimi', 'Dil Eğitimleri', 'Örgü ve İşleme Sanatları',
     'Gastronomi ve Mutfak Sanatları', 'Görsel İletişim ve Grafik Tasarım', 'Güzellik ve Saç Bakım Hizmetleri',
     'Kişisel Gelişim ve Eğitim', 'Medya ve İletişim', 'Moda Tasarımı ve Tekstil Teknolojisi',
     'Muhasebe ve Finansman', 'Müzik', 'Robotik ve Yapay Zekâ', 'Sahne Sanatları', 'Sanat ve Tasarım',
     'Yönetim ve Hizmet', 'Ziraat', 'Ahşap Tasarımı ve Teknolojileri', 'Süsleme Sanatları',
-    'Kuyumculuk ve Takı Tasarımı', 'Teknik Tasarım', 'Tekstil Tasarımı'
+    'Kuyumculuk ve Takı Tasarımı', 'Teknik Tasarım', 'Tekstil Tasarım'
   ],
   ICERIK_TAKIP: [
     'Arzu Mantar', 'Meltem Ermez', 'Meltem Ermez - Nezahat Kara', 'Nezahat Kara',
@@ -99,20 +100,20 @@ const LOOKUPS = {
     'Çekim Bekliyor', 'Çekimde', 'Çekim Bitti', 'Çekim Revize', 'İçerik Bitti', 'Ses Çekimi Bekleniyor',
     'İçerik Kontrolü', 'İçerik Revize', 'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'Montajda',
     'Montaj Kontrolü', 'Montaj Revize', 'ID Bekliyor', 'Yayında', 'Eğitim Beklemede', 'İptal',
-    'İYS Aşamasında', 'Animasyon Programı Bekliyor'
+    'ÖYS Aşamasında', 'Animasyon Programı Bekliyor'
   ],
-  MONTAJ_SORUMLUSU: ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yıkılmaz', 'Cihan Çimen'],
-  CEKIM_SORUMLUSU: ['Gülnur Köse', 'Sadi Demirci', 'Soner Ulu'],
-  CEKIM_YAPANLAR_LISTESI: ['Gülnur Köse', 'Sadi Demirci', 'Soner Ulu'],
+  MONTAJ_SORUMLUSU: ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yürük', 'Cihan Çimen'],
+  CEKIM_SORUMLUSU: ['Gülnur Kılıç', 'Sadi Demirci', 'Soner Ulu'],
+  CEKIM_YAPANLAR_LISTESI: ['Gülnur Kılıç', 'Sadi Demirci', 'Soner Ulu'],
   EVET_HAYIR: ['Yapıldı', 'Yapılmadı'],
-  TAMAMLANDI_DURUMU: ['Tamamlandı', 'Tamamlanmadı'],
-  CEKIM_DURUMU: ['Başlamadı', 'Devam Ediyor', 'Tekrar Çekim', 'Bitti'],
+  CEKIM_DURUMU: ['Başladı', 'Devam Ediyor', 'Tekrar Çekim', 'Bitti'],
   MONTAJ_DURUMU: ['Devam Ediyor', '1.Revize', '2.Revize', 'Bitti'],
   ICERIK_UZMANI: ['Arzu Mantar', 'Meltem Ermez', 'Nezahat Kara', 'Sevim Aydın Verim'],
   SYNOLOGY_DURUMU: ['Kaydedildi', 'Kaydedilmedi'],
   EGITIM_TASARIM_UZMANI: ['Başak Erkoç', 'Elif Nur Çonak', 'Emine Aytekin', 'Erdem Çevik', 'Umut Meral', 'Zehra Tüfenkçi'],
   CALISMA_GUNLERI: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'],
-  CALISMA_SAATLERI: ['08:30 – 17:00', '09:00 – 16:00', '08:30 – 12:00', '12:40 -17:00', '13:00 -16:30', '13:00 – 17:00']
+  CALISMA_SAATLERI: ['08:30 – 17:00', '09:00 – 16:00', '08:30 – 12:00', '12:40 -17:00', '13:00 -16:30', '13:00 – 17:00'],
+  TAMAMLANDI_DURUMU: ['Tamamlandı', 'Tamamlanmadı']
 };
 
 // --- Yardımcı Fonksiyonlar ---
@@ -131,7 +132,6 @@ const exportToExcel = (data, fileName) => {
       return cell;
     }).join(';'))
   ].join('\n');
-  
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -148,7 +148,6 @@ const formatDate = (dateString) => {
 };
 
 // --- Bileşenler ---
-
 const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -173,6 +172,7 @@ const Login = ({ onLogin }) => {
           <h1 className="text-2xl font-bold text-gray-800">UZEM Eğitim Takip Sistemi</h1>
           <p className="text-gray-500 mt-2">Yetkili Girişi</p>
         </div>
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
@@ -181,7 +181,7 @@ const Login = ({ onLogin }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
-              placeholder="••••••••"
+              placeholder="••••••"
             />
           </div>
           {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
@@ -203,12 +203,9 @@ const DataTable = ({
   data, 
   onAdd, 
   onUpdate, 
-  onDelete,
-  onRequestDelete,
-  onApproveDelete,
-  onRejectDelete, 
-  customRowClass, 
-  currentUser 
+  onDelete, 
+  customRowClass,
+  canEdit = true
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(null); 
@@ -216,9 +213,6 @@ const DataTable = ({
   const [isAdding, setIsAdding] = useState(false);
   const [addForm, setAddForm] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
-
-  const canEdit = currentUser?.canEdit;
-  const canDelete = currentUser?.canDelete;
 
   const requestSort = (key) => {
     let direction = 'ascending';
@@ -230,7 +224,7 @@ const DataTable = ({
 
   const filteredData = useMemo(() => {
     let processedData = data;
-    
+
     if (searchTerm) {
       const lowerTerm = searchTerm.toLowerCase();
       processedData = processedData.filter(item => 
@@ -244,16 +238,18 @@ const DataTable = ({
       processedData.sort((a, b) => {
         const valA = a[sortConfig.key] ? a[sortConfig.key].toString() : "";
         const valB = b[sortConfig.key] ? b[sortConfig.key].toString() : "";
-        
+
+        // --- ÖZEL SIRALAMA MANTIĞI (PINNED BOTTOM) ---
         const isPinnedBottom = (row, key) => {
             if (key === 'durum' && row.durum === 'Yayında') return true;
             if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
             if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
             return false;
         };
+
         const aPinned = isPinnedBottom(a, sortConfig.key);
         const bPinned = isPinnedBottom(b, sortConfig.key);
-        
+
         if (aPinned && !bPinned) return 1; 
         if (!aPinned && bPinned) return -1;
         
@@ -284,11 +280,6 @@ const DataTable = ({
   };
 
   const renderInput = (col, form, setForm) => {
-    // Sadece okunabilir (sistem tarafından doldurulan) alanlar için
-    if (col.readOnly) {
-        return <span className="text-gray-500 text-sm whitespace-nowrap">{form[col.key] || '-'}</span>;
-    }
-
     if (col.type === 'select') {
       return (
         <select
@@ -313,13 +304,14 @@ const DataTable = ({
             }
             setForm({ ...form, [col.key]: newVals.join(', ') });
         };
+
         return (
             <div className="w-full p-2 border rounded text-sm max-h-32 overflow-y-auto bg-white shadow-sm">
                 {(col.options || []).map(opt => (
                     <label key={opt} className="flex items-center gap-2 mb-1 cursor-pointer hover:bg-gray-50 p-1 rounded">
                         <input 
                             type="checkbox" 
-                            checked={currentVals.includes(opt)}
+                            checked={currentVals.includes(opt)} 
                             onChange={() => handleCheck(opt)}
                             className="rounded text-indigo-600 focus:ring-indigo-500"
                         />
@@ -413,8 +405,8 @@ const DataTable = ({
                 ))}
                 <td className="p-2 border-b text-center sticky right-0 bg-indigo-50">
                   <div className="flex justify-center gap-1">
-                    <button onClick={handleAddSubmit} className="p-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700" title="Kaydet"><Save size={14}/></button>
-                    <button onClick={() => setIsAdding(false)} className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500" title="İptal"><X size={14}/></button>
+                    <button onClick={handleAddSubmit} className="p-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"><Save size={14}/></button>
+                    <button onClick={() => setIsAdding(false)} className="p-1 bg-gray-400 text-white rounded hover:bg-gray-500"><X size={14}/></button>
                   </div>
                 </td>
               </tr>
@@ -423,7 +415,7 @@ const DataTable = ({
             {filteredData.map((row, idx) => {
               const isRowEditing = isEditing === row.id;
               const rowClass = customRowClass ? customRowClass(row) : '';
-              
+
               return (
                 <tr key={row.id} className={`border-b hover:bg-gray-50 transition-colors ${rowClass}`}>
                   <td className="p-3 text-center text-gray-500">{idx + 1}</td>
@@ -436,30 +428,13 @@ const DataTable = ({
                     <td className="p-3 text-center sticky right-0 bg-inherit shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]">
                         {isRowEditing ? (
                         <div className="flex justify-center gap-1">
-                            <button onClick={handleSave} className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700" title="Kaydet"><Save size={14}/></button>
-                            <button onClick={() => setIsEditing(null)} className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500" title="İptal"><X size={14}/></button>
+                            <button onClick={handleSave} className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700"><Save size={14}/></button>
+                            <button onClick={() => setIsEditing(null)} className="p-1.5 bg-gray-400 text-white rounded hover:bg-gray-500"><X size={14}/></button>
                         </div>
                         ) : (
-                        <div className="flex justify-center gap-1 items-center">
-                            <button onClick={() => handleEditClick(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Düzenle"><Edit2 size={16}/></button>
-                            
-                            {/* SİLME ONAY MEKANİZMASI */}
-                            {row.deleteRequested ? (
-                                canDelete ? (
-                                    <>
-                                        <button onClick={() => onApproveDelete(row.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="Silmeyi Onayla"><Check size={16}/></button>
-                                        <button onClick={() => onRejectDelete(row.id)} className="p-1.5 text-orange-500 hover:bg-orange-50 rounded transition-colors" title="Silmeyi Reddet"><X size={16}/></button>
-                                    </>
-                                ) : (
-                                    <span className="text-[10px] text-red-500 font-bold px-1 py-0.5 bg-red-100 rounded flex items-center h-6">Silme Bekliyor</span>
-                                )
-                            ) : (
-                                canDelete ? (
-                                    <button onClick={() => onDelete(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors" title="Sil"><Trash2 size={16}/></button>
-                                ) : (
-                                    <button onClick={() => onRequestDelete(row.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded transition-colors" title="Silme Talep Et"><Trash2 size={16}/></button>
-                                )
-                            )}
+                        <div className="flex justify-center gap-1">
+                            <button onClick={() => handleEditClick(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Edit2 size={16}/></button>
+                            <button onClick={() => onDelete(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={16}/></button>
                         </div>
                         )}
                     </td>
@@ -475,10 +450,9 @@ const DataTable = ({
 };
 
 // 3. Pages
-
 const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
-  
+
   const cols = [
     { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
     { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
@@ -499,7 +473,7 @@ const EducationPage = ({ currentUser }) => {
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
       // --- ADMİN KISITLAMASI ---
-      if (currentUser.id === 'admin') { 
+      if (currentUser.id === 'admin') {
          const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
          list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
       }
@@ -511,6 +485,7 @@ const EducationPage = ({ currentUser }) => {
       });
       setData(list);
     }, (err) => console.error("Education fetch error:", err));
+
     return () => unsub();
   }, [currentUser]);
 
@@ -525,19 +500,6 @@ const EducationPage = ({ currentUser }) => {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id));
     }
   };
-  const handleRequestDelete = async (id) => {
-    if(window.confirm('Bu kayıt için silme onayı talep edilecek. Emin misiniz?')) {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id), { deleteRequested: true });
-    }
-  };
-  const handleApproveDelete = async (id) => {
-    if(window.confirm('Bu kaydı kalıcı olarak silmeyi onaylıyor musunuz?')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id));
-    }
-  };
-  const handleRejectDelete = async (id) => {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id), { deleteRequested: false });
-  };
 
   return (
     <DataTable
@@ -547,25 +509,17 @@ const EducationPage = ({ currentUser }) => {
       onAdd={handleAdd}
       onUpdate={handleUpdate}
       onDelete={handleDelete}
-      onRequestDelete={handleRequestDelete}
-      onApproveDelete={handleApproveDelete}
-      onRejectDelete={handleRejectDelete}
-      customRowClass={(row) => {
-          if (row.deleteRequested) return 'bg-red-50 border-red-200';
-          if (row.durum === 'Yayında') return 'bg-green-50 border-green-200';
-          return '';
-      }}
-      currentUser={currentUser}
+      customRowClass={(row) => row.durum === 'Yayında' ? 'bg-green-50 border-green-200' : ''}
+      canEdit={currentUser.canEdit}
     />
   );
 };
 
 const FilmingPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
-  
+
   const cols = [
     { key: 'egitimAdi', label: 'Eğitim Adı' },
-    { key: 'modulAdi', label: 'Modül Adı' },
     { key: 'egitmen', label: 'Eğitmen Adı Soyadı' },
     { key: 'cekimSorumlusu', label: 'Çekim Sorumlusu', type: 'select', options: LOOKUPS.CEKIM_SORUMLUSU },
     { key: 'isikSorumlusu', label: 'Işık Sorumlusu', type: 'select', options: LOOKUPS.CEKIM_SORUMLUSU },
@@ -589,7 +543,6 @@ const FilmingPage = ({ currentUser }) => {
     { key: 'synologyKlasor', label: 'Synology Klasör Adı' },
     { key: 'cekimYapanlar', label: 'Çekim Yapanlar', type: 'multiselect', options: LOOKUPS.CEKIM_YAPANLAR_LISTESI },
     { key: 'notlar', label: 'Ek Notlar' },
-    { key: 'islemZamani', label: 'İşlem Tarih/Saati', readOnly: true },
   ];
 
   useEffect(() => {
@@ -604,34 +557,20 @@ const FilmingPage = ({ currentUser }) => {
       });
       setData(list);
     }, (err) => console.error("Filming fetch error:", err));
+
     return () => unsub();
   }, [currentUser]);
 
   const handleAdd = async (form) => {
-    const islemZamani = new Date().toLocaleString('tr-TR');
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'filming_tracking'), { ...form, islemZamani, createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'filming_tracking'), { ...form, createdAt: serverTimestamp() });
   };
   const handleUpdate = async (id, form) => {
-    const islemZamani = new Date().toLocaleString('tr-TR');
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id), { ...form, islemZamani, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id), form);
   };
   const handleDelete = async (id) => {
     if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id));
     }
-  };
-  const handleRequestDelete = async (id) => {
-    if(window.confirm('Bu kayıt için silme onayı talep edilecek. Emin misiniz?')) {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id), { deleteRequested: true });
-    }
-  };
-  const handleApproveDelete = async (id) => {
-    if(window.confirm('Bu kaydı kalıcı olarak silmeyi onaylıyor musunuz?')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id));
-    }
-  };
-  const handleRejectDelete = async (id) => {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'filming_tracking', id), { deleteRequested: false });
   };
 
   return (
@@ -642,22 +581,15 @@ const FilmingPage = ({ currentUser }) => {
       onAdd={handleAdd}
       onUpdate={handleUpdate}
       onDelete={handleDelete}
-      onRequestDelete={handleRequestDelete}
-      onApproveDelete={handleApproveDelete}
-      onRejectDelete={handleRejectDelete}
-      customRowClass={(row) => {
-          if (row.deleteRequested) return 'bg-red-50 border-red-200';
-          if (row.cekimDurumu === 'Bitti') return 'bg-green-50 border-green-200';
-          return '';
-      }}
-      currentUser={currentUser}
+      customRowClass={(row) => row.cekimDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
+      canEdit={currentUser.canEdit}
     />
   );
 };
 
 const EditingPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
-  
+
   const cols = [
     { key: 'egitimAdi', label: 'Eğitim Adı' },
     { key: 'egitmen', label: 'Eğitmen Adı Soyadı' },
@@ -669,7 +601,6 @@ const EditingPage = ({ currentUser }) => {
     { key: 'montajDurumu', label: 'Montaj Durumu', type: 'select', options: LOOKUPS.MONTAJ_DURUMU, sortable: true },
     { key: 'montajBitis', label: 'Montaj Bitiş', type: 'date' },
     { key: 'notlar', label: 'Ek Notlar' },
-    { key: 'islemZamani', label: 'İşlem Tarih/Saati', readOnly: true },
   ];
 
   useEffect(() => {
@@ -684,34 +615,20 @@ const EditingPage = ({ currentUser }) => {
       });
       setData(list);
     }, (err) => console.error("Editing fetch error:", err));
+
     return () => unsub();
   }, [currentUser]);
 
   const handleAdd = async (form) => {
-    const islemZamani = new Date().toLocaleString('tr-TR');
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'editing_tracking'), { ...form, islemZamani, createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'editing_tracking'), { ...form, createdAt: serverTimestamp() });
   };
   const handleUpdate = async (id, form) => {
-    const islemZamani = new Date().toLocaleString('tr-TR');
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id), { ...form, islemZamani, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id), form);
   };
   const handleDelete = async (id) => {
     if(window.confirm('Bu kaydı silmek istediğinize emin misiniz?')) {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id));
     }
-  };
-  const handleRequestDelete = async (id) => {
-    if(window.confirm('Bu kayıt için silme onayı talep edilecek. Emin misiniz?')) {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id), { deleteRequested: true });
-    }
-  };
-  const handleApproveDelete = async (id) => {
-    if(window.confirm('Bu kaydı kalıcı olarak silmeyi onaylıyor musunuz?')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id));
-    }
-  };
-  const handleRejectDelete = async (id) => {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'editing_tracking', id), { deleteRequested: false });
   };
 
   return (
@@ -722,22 +639,15 @@ const EditingPage = ({ currentUser }) => {
       onAdd={handleAdd}
       onUpdate={handleUpdate}
       onDelete={handleDelete}
-      onRequestDelete={handleRequestDelete}
-      onApproveDelete={handleApproveDelete}
-      onRejectDelete={handleRejectDelete}
-      customRowClass={(row) => {
-          if (row.deleteRequested) return 'bg-red-50 border-red-200';
-          if (row.montajDurumu === 'Bitti') return 'bg-green-50 border-green-200';
-          return '';
-      }}
-      currentUser={currentUser}
+      customRowClass={(row) => row.montajDurumu === 'Bitti' ? 'bg-green-50 border-green-200' : ''}
+      canEdit={currentUser.canEdit}
     />
   );
 };
 
 const InstructorPage = ({ currentUser }) => {
     const [data, setData] = useState([]);
-    
+
     const cols = [
         { key: 'egitmen', label: 'Eğitmen', sortable: true },
         { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
@@ -768,19 +678,6 @@ const InstructorPage = ({ currentUser }) => {
             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'instructor_management', id));
         }
     };
-    const handleRequestDelete = async (id) => {
-        if(window.confirm('Bu kayıt için silme onayı talep edilecek. Emin misiniz?')) {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'instructor_management', id), { deleteRequested: true });
-        }
-    };
-    const handleApproveDelete = async (id) => {
-        if(window.confirm('Bu kaydı kalıcı olarak silmeyi onaylıyor musunuz?')) {
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'instructor_management', id));
-        }
-    };
-    const handleRejectDelete = async (id) => {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'instructor_management', id), { deleteRequested: false });
-    };
 
     return (
         <DataTable
@@ -790,29 +687,32 @@ const InstructorPage = ({ currentUser }) => {
             onAdd={handleAdd}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
-            onRequestDelete={handleRequestDelete}
-            onApproveDelete={handleApproveDelete}
-            onRejectDelete={handleRejectDelete}
-            customRowClass={(row) => row.deleteRequested ? 'bg-red-50 border-red-200' : ''}
-            currentUser={currentUser}
+            canEdit={currentUser.canEdit}
         />
     );
 };
 
-const CalendarPage = () => (
-  <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
-    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-      <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
-    </h2>
-    <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden border border-gray-300">
-      <iframe 
-        src="https://meuzem.github.io/uzem_studyo/"
-        className="w-full h-full border-0"
-        title="Studio Calendar"
-      />
+// CalendarPage güncellendi (currentUser eklendi ve salt okunur katman oluşturuldu)
+const CalendarPage = ({ currentUser }) => {
+  const isReadOnly = currentUser?.id === 'filming';
+
+  return (
+    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
+      <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
+        {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">Sadece Görüntüleme</span>}
+      </h2>
+      <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden border border-gray-300 relative">
+        {isReadOnly && <div className="absolute inset-0 z-10 cursor-not-allowed"></div>}
+        <iframe 
+          src="https://meuzem.github.io/uzem_studyo/"
+          className="w-full h-full border-0"
+          title="Studio Calendar"
+        />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const DashboardPage = ({ currentUser }) => {
   const [eduData, setEduData] = useState([]);
@@ -830,13 +730,13 @@ const DashboardPage = ({ currentUser }) => {
   const inFilming = filmData.filter(d => d.cekimDurumu !== 'Bitti').length;
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   const published = eduData.filter(d => d.durum === 'Yayında').length;
-
+  
   const PREPARING_STATUSES = [
     'Eğitmen İçerik Hazırlıyor', 'Ekran Çekiminde',
     'Etkileşimli İçerik Hazırlanıyor', 'Çekim Bekliyor', 'İçerik Bitti',
     'Ses Çekimi Bekleniyor', 'İçerik Kontrolü', 'İçerik Revize',
     'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'ID Bekliyor',
-    'Yayında', 'İYS Aşamasında', 'Animasyon Programı Bekliyor'
+    'Yayında', 'ÖYS Aşamasında', 'Animasyon Programı Bekliyor'
   ];
   const hazirlanan = eduData.filter(d => PREPARING_STATUSES.includes(d.durum)).length;
 
@@ -858,7 +758,7 @@ const DashboardPage = ({ currentUser }) => {
   const barData = {
     labels: ['Çekimde', 'Montajda', 'Yayında', 'Hazırlanan'],
     datasets: [{
-      label: 'Sayı',
+      label: 'Süreç Dağılımı',
       data: [inFilming, inEditing, published, hazirlanan],
       backgroundColor: ['#f97316', '#8b5cf6', '#22c55e', '#64748b'],
     }]
@@ -884,6 +784,7 @@ const DashboardPage = ({ currentUser }) => {
           <div className="text-3xl font-bold text-slate-600 mt-1">{hazirlanan}</div>
         </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[400px] flex flex-col">
           <h3 className="text-sm font-bold text-gray-700 mb-4">Eğitim Durum Dağılımı</h3>
@@ -903,7 +804,6 @@ const DashboardPage = ({ currentUser }) => {
 };
 
 // --- Main App Shell ---
-
 export default function App() {
   const [userRole, setUserRole] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -919,6 +819,7 @@ export default function App() {
       catch (error) { if (isMounted) setAuthError("Bağlantı hatası. İnternet bağlantınızı kontrol edin."); }
     };
     initAuth();
+
     const unsub = onAuthStateChanged(auth, (u) => { if (isMounted) { setFirebaseUser(u); setLoading(false); } });
     return () => { isMounted = false; unsub(); };
   }, []);
@@ -964,7 +865,7 @@ export default function App() {
       `}>
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">E-<span className="text-indigo-400">UZEM</span></h1>
+            <h1 className="text-xl font-bold tracking-tight">Eİİ <span className="text-indigo-400">UZEM</span></h1>
             <p className="text-xs text-slate-400 mt-1">Panel</p>
           </div>
           <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400"><X size={20}/></button>
@@ -1021,7 +922,10 @@ export default function App() {
           {activeTab === 'education' && <EducationPage currentUser={userRole} />}
           {activeTab === 'filming' && <FilmingPage currentUser={userRole} />}
           {activeTab === 'editing' && <EditingPage currentUser={userRole} />}
-          {activeTab === 'calendar' && <CalendarPage />}
+          
+          {/* CalendarPage'e currentUser propu eklendi */}
+          {activeTab === 'calendar' && <CalendarPage currentUser={userRole} />}
+          
           {activeTab === 'instructors' && <InstructorPage currentUser={userRole} />}
         </main>
       </div>
