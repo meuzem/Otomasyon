@@ -147,21 +147,38 @@ const parseCSV = (text) => {
   const result = [];
   if (lines.length < 2) return result;
   
-  // CSV ayrıştırılırken başlıkları temizler ve küçük harfe dönüştürerek kolay eşleşme sağlar
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+  // Tırnak işaretlerini ve içindeki virgülleri güvenle ayırmak için satır okuyucu
+  const parseRow = (row) => {
+    const values = [];
+    let inQuotes = false;
+    let currentValue = '';
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(currentValue.trim());
+        currentValue = '';
+      } else {
+        currentValue += char;
+      }
+    }
+    values.push(currentValue.trim());
+    return values;
+  };
+
+  const headers = parseRow(lines[0]);
   
   for(let i = 1; i < lines.length; i++) {
     if(!lines[i].trim()) continue;
-    
-    const currentline = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+    const currentline = parseRow(lines[i]);
     const obj = {};
-    
     headers.forEach((header, index) => {
-      let val = currentline[index] ? currentline[index].trim() : '';
+      let val = currentline[index] || '';
       if (val.startsWith('"') && val.endsWith('"')) {
         val = val.substring(1, val.length - 1);
       }
-      obj[header] = val; // Küçük harfli başlıklarla nesne oluştur
+      obj[header] = val;
     });
     result.push(obj);
   }
@@ -495,17 +512,21 @@ const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  // Tablo başlıkları Google Sheets ile tam uyumlu hale getirildi
   const cols = [
-    { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
-    { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
-    { key: 'bolum', label: 'Bölüm' },
-    { key: 'egitim', label: 'Eğitim' },
-    { key: 'egitmen', label: 'Eğitmen', sortable: true },
-    { key: 'icerikTakip', label: 'İçerik Takip', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
-    { key: 'durum', label: 'Durum', type: 'select', options: LOOKUPS.DURUM_GENEL, sortable: true },
-    { key: 'icerikBaslama', label: 'İçerik Başlama', type: 'date' },
-    { key: 'yayinTarihi', label: 'Yayın Tarihi', type: 'date' },
-    { key: 'notlar', label: 'Notlar' },
+    { key: 'dal', label: 'DAL ADI', type: 'select', options: LOOKUPS.DAL },
+    { key: 'alan', label: 'ALAN ADI', type: 'select', options: LOOKUPS.ALAN, sortable: true },
+    { key: 'bolum', label: 'BÖLÜM' },
+    { key: 'egitim', label: 'EĞİTİM' },
+    { key: 'egitmen', label: 'EĞİTMEN', sortable: true },
+    { key: 'icerikTakip', label: 'İÇERİK TAKİP', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
+    { key: 'durum', label: 'DURUM', type: 'select', options: LOOKUPS.DURUM_GENEL, sortable: true },
+    { key: 'icerikBaslama', label: 'İÇERİK BAŞLAMA TARİHİ', type: 'date' },
+    { key: 'cekimBaslama', label: 'ÇEKİM BAŞLAMA TARİHİ', type: 'date' },
+    { key: 'montajBaslama', label: 'MONTAJ BAŞLAMA TARİHİ', type: 'date' },
+    { key: 'montajSorumlusu', label: 'MONTAJ SORUMLUSU', type: 'select', options: LOOKUPS.MONTAJ_SORUMLUSU },
+    { key: 'yayinTarihi', label: 'YAYIN TARİHİ', type: 'date' },
+    { key: 'notlar', label: 'NOTLAR' },
   ];
 
   useEffect(() => {
@@ -530,7 +551,6 @@ const EducationPage = ({ currentUser }) => {
   }, [currentUser]);
 
   useEffect(() => {
-    // Sadece yönetici rolü varsa arka planda eşitlemeyi çalıştır
     if (!currentUser || currentUser.id === 'admin') return;
 
     const syncWithSheets = async () => {
@@ -538,34 +558,49 @@ const EducationPage = ({ currentUser }) => {
       setIsSyncing(true);
       
       try {
-        // gviz URL'si CORS hatalarını aşmak için kullanıldı
         const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/gviz/tq?tqx=out:csv&gid=1682860427";
         const response = await fetch(sheetUrl);
         const text = await response.text();
         const sheetData = parseCSV(text);
         
-        const existingEgitimler = data.map(item => item.egitim?.toLowerCase().trim());
-        
+        // CSV'deki başlıkların boşluk ve noktalama işaretlerini temizleyerek arama yapan yardımcı fonksiyon
+        const normalizeHeader = (h) => h.toLowerCase().replace(/[\s,]/g, '');
+        const getValue = (row, possibleNames) => {
+            const key = Object.keys(row).find(k => possibleNames.includes(normalizeHeader(k)));
+            return key ? row[key] : '';
+        };
+
         for (const row of sheetData) {
-          // Başlıkların tamamen küçük harfe döndürüldüğü hesaba katılarak eşleştirme (örn: 'eğitim', 'eği̇ti̇m')
-          const egitimAdi = row['eğitim'] || row['eğitim adı'] || row['egitim'] || ''; 
+          const egitimAdi = getValue(row, ['eğitim', 'egitim', 'eğitimadı', 'egitimadi']);
+          if (!egitimAdi) continue; 
           
-          if (egitimAdi && !existingEgitimler.includes(egitimAdi.toLowerCase().trim())) {
-             const newRecord = {
-                 dal: row['dal'] || '',
-                 alan: row['alan'] || '',
-                 bolum: row['bölüm'] || row['bolum'] || '',
-                 egitim: egitimAdi,
-                 egitmen: row['eğitmen'] || row['egitmen'] || '',
-                 icerikTakip: row['içerik takip'] || row['icerik'] || '',
-                 durum: row['durum'] || 'Eğitim Planlanıyor',
-                 icerikBaslama: row['içerik başlama'] || '',
-                 yayinTarihi: row['yayın tarihi'] || '',
-                 notlar: row['notlar'] || '',
-                 createdAt: serverTimestamp(),
-                 kaynak: 'GoogleSheets'
-             };
-             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), newRecord);
+          const recordData = {
+             dal: getValue(row, ['daladı', 'daladi', 'dal']),
+             alan: getValue(row, ['alanadı', 'alanadi', 'alan']),
+             bolum: getValue(row, ['bölüm', 'bolum']),
+             egitim: egitimAdi,
+             egitmen: getValue(row, ['eğitmen', 'egitmen']),
+             icerikTakip: getValue(row, ['içeriktakip', 'iceriktakip', 'içeriktaki,p']),
+             durum: getValue(row, ['durum']) || 'Eğitim Planlanıyor',
+             icerikBaslama: getValue(row, ['içerikbaşlamatarihi', 'icerikbaslamatarihi', 'içerikbaşlama']),
+             cekimBaslama: getValue(row, ['çekimbaşlamatarihi', 'cekimbaslamatarihi', 'çekimbaşlama']),
+             montajBaslama: getValue(row, ['montajbaşlamatarihi', 'montajbaslamatarihi', 'montajbaşlama']),
+             montajSorumlusu: getValue(row, ['montajsorumlusu']),
+             yayinTarihi: getValue(row, ['yayıntarihi', 'yayintarihi']),
+             notlar: getValue(row, ['notlar', 'not']),
+             updatedAt: serverTimestamp(),
+             kaynak: 'GoogleSheets'
+          };
+
+          const existingRecord = data.find(item => item.egitim?.toLowerCase().trim() === egitimAdi.toLowerCase().trim());
+          
+          if (existingRecord) {
+             // Eğer kayıt varsa sadece günceller
+             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', existingRecord.id), recordData);
+          } else {
+             // Yeni kayıt ise ekler
+             recordData.createdAt = serverTimestamp();
+             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), recordData);
           }
         }
       } catch (error) {
@@ -579,7 +614,7 @@ const EducationPage = ({ currentUser }) => {
     const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
     
     return () => clearInterval(interval);
-  }, [currentUser, data]);
+  }, [currentUser, data]); // 'data' bağımlılığı mevcut kayıtları bilmesi için gerekli
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -876,12 +911,9 @@ const CalendarPage = ({ currentUser }) => {
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* Kapsayıcı Div (Scroll işlemlerini bu üstlenir) */}
       <div className="flex-1 bg-gray-100 rounded-lg overflow-auto border border-gray-300 relative custom-scrollbar">
-        {/* İç Alan (İframe'in asıl boyutlandırıldığı alan) */}
         <div style={{ width: '100%', minWidth: '1000px', height: '1000px', position: 'relative' }}>
           
-          {/* Düzenlemeyi Engelleyen ancak kaydırmaya (scroll) izin veren saydam katman */}
           {isReadOnly && (
              <div 
                className="absolute inset-0 z-10 cursor-not-allowed" 
@@ -890,7 +922,6 @@ const CalendarPage = ({ currentUser }) => {
              ></div>
           )}
           
-          {/* Iframe üzerinden tıklamaları tamamen kapatmak için pointerEvents 'none' yapıldı */}
           <iframe 
             src="https://meuzem.github.io/uzem_studyo/"
             className="w-full h-full border-0"
