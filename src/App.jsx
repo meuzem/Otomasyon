@@ -44,7 +44,7 @@ import {
   Search, 
   Menu, 
   Users, 
-  ArrowUpDown, 
+  ArrowUpDown,
   Check
 } from 'lucide-react';
 
@@ -147,7 +147,8 @@ const parseCSV = (text) => {
   const result = [];
   if (lines.length < 2) return result;
   
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  // CSV ayrıştırılırken başlıkları temizler ve küçük harfe dönüştürerek kolay eşleşme sağlar
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
   
   for(let i = 1; i < lines.length; i++) {
     if(!lines[i].trim()) continue;
@@ -160,7 +161,7 @@ const parseCSV = (text) => {
       if (val.startsWith('"') && val.endsWith('"')) {
         val = val.substring(1, val.length - 1);
       }
-      obj[header] = val;
+      obj[header] = val; // Küçük harfli başlıklarla nesne oluştur
     });
     result.push(obj);
   }
@@ -507,7 +508,6 @@ const EducationPage = ({ currentUser }) => {
     { key: 'notlar', label: 'Notlar' },
   ];
 
-  // Firestore Gerçek Zamanlı Dinleme
   useEffect(() => {
     if (!currentUser) return; 
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), orderBy('createdAt', 'desc'));
@@ -529,8 +529,8 @@ const EducationPage = ({ currentUser }) => {
     return () => unsub();
   }, [currentUser]);
 
-  // Google Sheets Otomatik Senkronizasyon İşlemi
   useEffect(() => {
+    // Sadece yönetici rolü varsa arka planda eşitlemeyi çalıştır
     if (!currentUser || currentUser.id === 'admin') return;
 
     const syncWithSheets = async () => {
@@ -538,7 +538,8 @@ const EducationPage = ({ currentUser }) => {
       setIsSyncing(true);
       
       try {
-        const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/export?format=csv&gid=1682860427";
+        // gviz URL'si CORS hatalarını aşmak için kullanıldı
+        const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/gviz/tq?tqx=out:csv&gid=1682860427";
         const response = await fetch(sheetUrl);
         const text = await response.text();
         const sheetData = parseCSV(text);
@@ -546,20 +547,21 @@ const EducationPage = ({ currentUser }) => {
         const existingEgitimler = data.map(item => item.egitim?.toLowerCase().trim());
         
         for (const row of sheetData) {
-          const egitimAdi = row['Eğitim'] || row['egitim']; 
+          // Başlıkların tamamen küçük harfe döndürüldüğü hesaba katılarak eşleştirme (örn: 'eğitim', 'eği̇ti̇m')
+          const egitimAdi = row['eğitim'] || row['eğitim adı'] || row['egitim'] || ''; 
           
           if (egitimAdi && !existingEgitimler.includes(egitimAdi.toLowerCase().trim())) {
              const newRecord = {
-                 dal: row['Dal'] || row['dal'] || '',
-                 alan: row['Alan'] || row['alan'] || '',
-                 bolum: row['Bölüm'] || row['bolum'] || '',
+                 dal: row['dal'] || '',
+                 alan: row['alan'] || '',
+                 bolum: row['bölüm'] || row['bolum'] || '',
                  egitim: egitimAdi,
-                 egitmen: row['Eğitmen'] || row['egitmen'] || '',
-                 icerikTakip: row['İçerik Takip'] || row['icerikTakip'] || '',
-                 durum: row['Durum'] || row['durum'] || 'Eğitim Planlanıyor',
-                 icerikBaslama: row['İçerik Başlama'] || row['icerikBaslama'] || '',
-                 yayinTarihi: row['Yayın Tarihi'] || row['yayinTarihi'] || '',
-                 notlar: row['Notlar'] || row['notlar'] || '',
+                 egitmen: row['eğitmen'] || row['egitmen'] || '',
+                 icerikTakip: row['içerik takip'] || row['icerik'] || '',
+                 durum: row['durum'] || 'Eğitim Planlanıyor',
+                 icerikBaslama: row['içerik başlama'] || '',
+                 yayinTarihi: row['yayın tarihi'] || '',
+                 notlar: row['notlar'] || '',
                  createdAt: serverTimestamp(),
                  kaynak: 'GoogleSheets'
              };
@@ -868,17 +870,34 @@ const CalendarPage = ({ currentUser }) => {
   const isReadOnly = currentUser?.id === 'filming';
   
   return (
-    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
+    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col relative">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
-      <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden border border-gray-300 relative">
-        <iframe 
-          src="https://meuzem.github.io/uzem_studyo/"
-          className="w-full h-full border-0"
-          title="Studio Calendar"
-        />
+      
+      {/* Kapsayıcı Div (Scroll işlemlerini bu üstlenir) */}
+      <div className="flex-1 bg-gray-100 rounded-lg overflow-auto border border-gray-300 relative custom-scrollbar">
+        {/* İç Alan (İframe'in asıl boyutlandırıldığı alan) */}
+        <div style={{ width: '100%', minWidth: '1000px', height: '1000px', position: 'relative' }}>
+          
+          {/* Düzenlemeyi Engelleyen ancak kaydırmaya (scroll) izin veren saydam katman */}
+          {isReadOnly && (
+             <div 
+               className="absolute inset-0 z-10 cursor-not-allowed" 
+               style={{ backgroundColor: 'transparent' }}
+               title="Sadece görüntüleme yetkiniz bulunmaktadır."
+             ></div>
+          )}
+          
+          {/* Iframe üzerinden tıklamaları tamamen kapatmak için pointerEvents 'none' yapıldı */}
+          <iframe 
+            src="https://meuzem.github.io/uzem_studyo/"
+            className="w-full h-full border-0"
+            title="Studio Calendar"
+            style={isReadOnly ? { pointerEvents: 'none' } : {}}
+          />
+        </div>
       </div>
     </div>
   );
@@ -897,7 +916,6 @@ const DashboardPage = ({ currentUser }) => {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
-  // Çekimdeki Eğitim sayısını Eğitim Takip datasından (eduData) çekme:
   const inFilming = eduData.filter(d => d.durum === 'Çekimde').length;
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   const published = eduData.filter(d => d.durum === 'Yayında').length;
