@@ -145,56 +145,38 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('tr-TR');
 };
 
-// Geliştirilmiş, başlıktaki virgül ve noktalama işaretlerini süzen CSV ayrıştırıcı
-const parseCSVToObjects = (text) => {
-  const lines = [];
-  let row = [];
-  let inQuotes = false;
-  let val = '';
-  for (let i = 0; i < text.length; i++) {
-    let char = text[i];
-    let nextChar = text[i + 1];
-    if (char === '"' && inQuotes && nextChar === '"') {
-      val += '"';
-      i++;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      row.push(val.trim());
-      val = '';
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && nextChar === '\n') i++;
-      row.push(val.trim());
-      lines.push(row);
-      row = [];
-      val = '';
-    } else {
-      val += char;
+const parseDate = (dateStr) => {
+    if (!dateStr) return '';
+    let parts = dateStr.split(/[./-]/);
+    if (parts.length === 3) {
+        if (parts[2].length === 4) {
+            return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+        }
+        if (parts[0].length === 4) {
+            return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+        }
     }
-  }
-  if (val !== '' || row.length > 0) {
-    row.push(val.trim());
-    lines.push(row);
-  }
+    return dateStr; 
+};
 
-  if (lines.length < 2) return [];
-
-  // Başlıklardaki tüm virgül, boşluk ve özel karakterleri sil, sadece Türkçe ve Latin harfleri tut
-  const normalize = (h) => (h || '').toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, '');
-  const headers = lines[0].map(normalize);
-  
-  const result = [];
-  for (let i = 1; i < lines.length; i++) {
-    const currentLine = lines[i];
-    if (currentLine.length === 1 && currentLine[0] === '') continue; // Boş satırları atla
-    
-    const obj = {};
-    headers.forEach((header, index) => {
-       obj[header] = currentLine[index] || '';
-    });
-    result.push(obj);
-  }
-  return result;
+// Sütun sıralarına dayalı, en güvenli CSV ayrıştırıcı
+const parseCSV = (str) => {
+    const arr = [];
+    let quote = false;
+    let row = 0, col = 0;
+    for (let c = 0; c < str.length; c++) {
+        let cc = str[c], nc = str[c+1];
+        arr[row] = arr[row] || [];
+        arr[row][col] = arr[row][col] || '';
+        if (cc === '"' && quote && nc === '"') { arr[row][col] += cc; ++c; continue; }
+        if (cc === '"') { quote = !quote; continue; }
+        if (cc === ',' && !quote) { ++col; continue; }
+        if (cc === '\r' && nc === '\n' && !quote) { ++row; col = 0; ++c; continue; }
+        if (cc === '\n' && !quote) { ++row; col = 0; continue; }
+        if (cc === '\r' && !quote) { ++row; col = 0; continue; }
+        arr[row][col] += cc;
+    }
+    return arr;
 };
 
 // --- Bileşenler ---
@@ -290,7 +272,7 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // ALTTA SABİTLENECEK DURUMLAR (Eğitim Takip Sayfası için)
+      // 1. PINNED BOTTOM GRUBU: Ne sıralanırsa sıralansın bu 4 durum harf sırasına göre en altta yer alır
       const getBottomOrder = (status) => {
         if (status === 'Eğitim Beklemede') return 1;
         if (status === 'Eğitmen Ayrıldı') return 2;
@@ -499,9 +481,9 @@ const DataTable = ({
                   {columns.map(col => (
                     <td key={col.key} className="p-3 align-top">
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (
-                          // Notlar alanının alt satırlara inerek uzamasını (wrap) sağlayan kod
+                          // Notlar alanının alt satırlara inerek uzamasını (wrap) sağlayan kod bloğu
                           col.key === 'notlar' 
-                            ? <div className="min-w-[200px] max-w-[300px] whitespace-pre-wrap break-words text-sm leading-relaxed">{row[col.key]}</div> 
+                            ? <div className="min-w-[200px] max-w-[400px] whitespace-pre-wrap break-words text-sm leading-relaxed">{row[col.key]}</div> 
                             : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])
                       )}
                     </td>
@@ -588,49 +570,87 @@ const EducationPage = ({ currentUser }) => {
     setIsSyncing(true);
     
     try {
-      const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/gviz/tq?tqx=out:csv&gid=1682860427";
+      const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/export?format=csv&gid=1682860427";
       const response = await fetch(sheetUrl);
       const text = await response.text();
       
-      const sheetData = parseCSVToObjects(text);
-      if (sheetData.length === 0) {
+      // Güvenlik: Eğer yetki hatası yüzünden HTML (login vb.) dönerse veri silmeyi engelle.
+      if (text.toLowerCase().includes('<!doctype html>') || text.toLowerCase().includes('<html')) {
+          console.error("Geçersiz veri veya erişim engellendi (HTML döndü).");
+          setIsSyncing(false);
+          return;
+      }
+
+      const sheetData = parseCSV(text);
+      if (sheetData.length < 2) {
           setIsSyncing(false);
           return;
       }
 
       const batch = writeBatch(db);
-
       const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
-      snapshot.docs.forEach((docSnap) => {
-          batch.delete(docSnap.ref);
+      
+      const existingDocs = {};
+      snapshot.docs.forEach(doc => {
+          existingDocs[doc.data().egitim?.toLowerCase().trim()] = doc;
       });
 
-      for (const row of sheetData) {
-        const egitimAdi = row['eğitim'] || row['egitim'] || row['egitimadi'];
-        if (!egitimAdi) continue; 
+      const currentSheetEgitimler = new Set();
+      let validRowCount = 0;
+
+      // Sütunların indeks sıralamasıyla direkt okuma (Virgül ve başlık adı hatalarına karşı tam koruma)
+      for (let i = 1; i < sheetData.length; i++) {
+        const row = sheetData[i];
+        // 3. indeks = EĞİTİM
+        if (!row || row.length < 4 || !row[3] || row[3].trim() === '') continue; 
         
-        const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
-        batch.set(newRef, {
-             dal: row['daladı'] || row['daladi'] || row['dal'] || '',
-             alan: row['alanadı'] || row['alanadi'] || row['alan'] || '',
-             bolum: row['bölüm'] || row['bolum'] || '',
+        const egitimAdi = row[3].trim();
+        currentSheetEgitimler.add(egitimAdi.toLowerCase());
+        validRowCount++;
+
+        const recordData = {
+             dal: row[0]?.trim() || '',
+             alan: row[1]?.trim() || '',
+             bolum: row[2]?.trim() || '',
              egitim: egitimAdi,
-             egitmen: row['eğitmen'] || row['egitmen'] || '',
-             icerikTakip: row['içeriktakip'] || row['iceriktakip'] || '',
-             durum: row['durum'] || 'Eğitim Planlanıyor',
-             icerikBaslama: row['içerikbaşlamatarihi'] || row['icerikbaslama'] || '',
-             cekimBaslama: row['çekimbaşlamatarihi'] || row['cekimbaslama'] || '',
-             montajBaslama: row['montajbaşlamatarihi'] || row['montajbaslama'] || '',
-             montajSorumlusu: row['montajsorumlusu'] || '',
-             yayinTarihi: row['yayıntarihi'] || row['yayintarihi'] || '',
-             notlar: row['notlar'] || '',
-             createdAt: serverTimestamp(),
+             egitmen: row[4]?.trim() || '',
+             icerikTakip: row[5]?.trim() || '', // 5. İndeks = İÇERİK TAKİP
+             durum: row[6]?.trim() || 'Eğitim Planlanıyor',
+             icerikBaslama: parseDate(row[7]?.trim()),
+             cekimBaslama: parseDate(row[8]?.trim()),
+             montajBaslama: parseDate(row[9]?.trim()),
+             montajSorumlusu: row[10]?.trim() || '',
+             yayinTarihi: parseDate(row[11]?.trim()),
+             notlar: row[12]?.trim() || '',
+             updatedAt: serverTimestamp(),
              kaynak: 'GoogleSheets'
-        });
+        };
+
+        const existingDoc = existingDocs[egitimAdi.toLowerCase()];
+        if (existingDoc) {
+           batch.update(existingDoc.ref, recordData);
+        } else {
+           recordData.createdAt = serverTimestamp();
+           const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
+           batch.set(newRef, recordData);
+        }
       }
 
-      await batch.commit();
-      
+      // Güvenlik kilidi: Eğer Sheets tablosundan başarılı bir şekilde en az 10 kayıt çekilebildiyse 
+      // tabloda OLMAYAN eski veritabanı kayıtlarını silerek tam senkronizasyon (sıfırlama) sağla.
+      if (validRowCount > 10) {
+          snapshot.docs.forEach(doc => {
+              const egitim = doc.data().egitim?.toLowerCase().trim();
+              if (egitim && !currentSheetEgitimler.has(egitim)) {
+                  batch.delete(doc.ref);
+              }
+          });
+          await batch.commit();
+      } else if (validRowCount > 0) {
+          // Eğer 10'dan az veri varsa sadece güncelleme/ekleme yap, tüm sistemi çökertecek silmeyi engelle.
+          await batch.commit();
+      }
+
     } catch (error) {
       console.error("Sheet otomatik veri çekme hatası:", error);
     } finally {
@@ -642,7 +662,7 @@ const EducationPage = ({ currentUser }) => {
     syncWithSheets();
     const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
     return () => clearInterval(interval);
-  }, [currentUser, data.length]); 
+  }, [currentUser]); // data.length bağımlılığı çıkarılarak gereksiz wipe döngüsü engellendi.
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -696,9 +716,9 @@ const EducationPage = ({ currentUser }) => {
       customRowClass={(row) => {
           if (row.deleteRequested) return 'bg-red-50 border-red-200';
           if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-50 border-blue-200 text-blue-900';
-          if (row.durum === 'Eğitim Beklemede') return 'bg-orange-100 border-orange-200 text-orange-900';
-          if (row.durum === 'İptal') return 'bg-gray-200 border-gray-300 text-gray-700';
-          if (row.durum === 'Yayında') return 'bg-green-50 border-green-200';
+          if (row.durum === 'Eğitim Beklemede') return 'bg-orange-50 border-orange-200 text-orange-900';
+          if (row.durum === 'İptal') return 'bg-gray-100 border-gray-300 text-gray-700';
+          if (row.durum === 'Yayında') return 'bg-green-50 border-green-200 text-green-900';
           return '';
       }}
       currentUser={currentUser}
@@ -946,37 +966,19 @@ const InstructorPage = ({ currentUser }) => {
 };
 
 const CalendarPage = ({ currentUser }) => {
-  const canEditCalendar = currentUser?.id === 'manager' || currentUser?.id === 'education';
-  
   return (
-    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col relative">
+    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
-        {!canEditCalendar && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* 
-        Scroll edilebilir dış kutu. İframe içinde kaydırma yapılmasını taklit etmek için 
-        içeriği suni olarak uzatır, böylece tekerlek hareketleri dış kutuyu kaydırır.
-      */}
-      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-y-auto custom-scrollbar">
-        {/* İframe ve koruyucu katmanın yerleştiği çok uzun iç kutu */}
-        <div style={{ height: '2200px', position: 'relative' }}>
-          
-          {/* Tıklamaları YAKALAYAN Kalkan - Scroll'u engellemez çünkü parent'ta overflow var */}
-          {!canEditCalendar && (
-             <div 
-               className="absolute inset-0 z-10" 
-               title="Sadece görüntüleme yetkiniz bulunmaktadır."
-             ></div>
-          )}
-          
-          <iframe 
-            src="https://meuzem.github.io/uzem_studyo/"
-            className="w-full h-full border-0 absolute top-0 left-0"
-            title="Studio Calendar"
-          />
-        </div>
+      {/* Kaydırma serbestliği ve tam görünüm için tüm kilitler tamamen kaldırıldı. */}
+      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-hidden">
+        <iframe 
+          src="https://meuzem.github.io/uzem_studyo/"
+          className="w-full h-full border-0"
+          title="Studio Calendar"
+        />
       </div>
     </div>
   );
