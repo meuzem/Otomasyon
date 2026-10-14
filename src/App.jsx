@@ -634,7 +634,7 @@ const EducationPage = ({ currentUser }) => {
              bolum: row[2]?.trim() || '',
              egitim: egitimAdi,
              egitmen: row[4]?.trim() || '',
-             icerikTakip: row[5]?.trim() || '', // 5. İndeks = İÇERİK TAKİP
+             icerikTakip: row[5]?.trim() || '',
              durum: row[6]?.trim() || 'Eğitim Planlanıyor',
              icerikBaslama: parseDate(row[7]?.trim()),
              cekimBaslama: parseDate(row[8]?.trim()),
@@ -1032,7 +1032,8 @@ const DashboardPage = ({ currentUser }) => {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
-  const inFilming = eduData.filter(d => d.durum === 'Çekimde').length;
+  const inFilmingStatuses = ['Çekimde', 'Çekim Revize', 'Ekran Çekiminde'];
+  const inFilming = eduData.filter(d => inFilmingStatuses.includes(d.durum)).length;
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   const published = eduData.filter(d => d.durum === 'Yayında').length;
   
