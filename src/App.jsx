@@ -179,6 +179,29 @@ const parseCSV = (str) => {
     return arr;
 };
 
+// Uzun notlar için genişleyen metin bileşeni
+const TruncatedText = ({ text, maxLength = 40 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const strText = String(text || '');
+  
+  if (!strText || strText === 'undefined') return <span>-</span>;
+  if (strText.length <= maxLength) return <span>{strText}</span>;
+  
+  return (
+    <div className="max-w-[300px]">
+      <span className={isExpanded ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}>
+        {isExpanded ? strText : `${strText.substring(0, maxLength)}...`}
+      </span>
+      <button 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold ml-1 focus:outline-none underline"
+      >
+        {isExpanded ? 'Daralt' : 'Devamını gör'}
+      </button>
+    </div>
+  );
+};
+
 // --- Bileşenler ---
 const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
@@ -272,13 +295,13 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // 1. PINNED BOTTOM GRUBU: Ne sıralanırsa sıralansın bu 4 durum harf sırasına göre en altta yer alır
+      // ALTTA SABİTLENECEK DURUMLAR
       const getBottomOrder = (status) => {
         if (status === 'Eğitim Beklemede') return 1;
         if (status === 'Eğitmen Ayrıldı') return 2;
         if (status === 'İptal') return 3;
         if (status === 'Yayında') return 4;
-        return 0; // Pinned değil
+        return 0;
       };
 
       const aOrder = getBottomOrder(a.durum);
@@ -292,7 +315,6 @@ const DataTable = ({
       if (aOrder > 0) return 1;
       if (bOrder > 0) return -1;
 
-      // Çekim/Montaj sayfaları için "Bitti" iğnelemesi
       const isPinned = (row, key) => {
           if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
           if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
@@ -481,9 +503,9 @@ const DataTable = ({
                   {columns.map(col => (
                     <td key={col.key} className="p-3 align-top">
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (
-                          // Notlar alanının alt satırlara inerek uzamasını (wrap) sağlayan kod bloğu
+                          // Sadece notlar için TruncatedText eklendi
                           col.key === 'notlar' 
-                            ? <div className="min-w-[200px] max-w-[400px] whitespace-pre-wrap break-words text-sm leading-relaxed">{row[col.key]}</div> 
+                            ? <TruncatedText text={row[col.key]} maxLength={40} />
                             : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])
                       )}
                     </td>
@@ -574,7 +596,6 @@ const EducationPage = ({ currentUser }) => {
       const response = await fetch(sheetUrl);
       const text = await response.text();
       
-      // Güvenlik: Eğer yetki hatası yüzünden HTML (login vb.) dönerse veri silmeyi engelle.
       if (text.toLowerCase().includes('<!doctype html>') || text.toLowerCase().includes('<html')) {
           console.error("Geçersiz veri veya erişim engellendi (HTML döndü).");
           setIsSyncing(false);
@@ -598,10 +619,8 @@ const EducationPage = ({ currentUser }) => {
       const currentSheetEgitimler = new Set();
       let validRowCount = 0;
 
-      // Sütunların indeks sıralamasıyla direkt okuma (Virgül ve başlık adı hatalarına karşı tam koruma)
       for (let i = 1; i < sheetData.length; i++) {
         const row = sheetData[i];
-        // 3. indeks = EĞİTİM
         if (!row || row.length < 4 || !row[3] || row[3].trim() === '') continue; 
         
         const egitimAdi = row[3].trim();
@@ -614,7 +633,7 @@ const EducationPage = ({ currentUser }) => {
              bolum: row[2]?.trim() || '',
              egitim: egitimAdi,
              egitmen: row[4]?.trim() || '',
-             icerikTakip: row[5]?.trim() || '', // 5. İndeks = İÇERİK TAKİP
+             icerikTakip: row[5]?.trim() || '',
              durum: row[6]?.trim() || 'Eğitim Planlanıyor',
              icerikBaslama: parseDate(row[7]?.trim()),
              cekimBaslama: parseDate(row[8]?.trim()),
@@ -636,8 +655,6 @@ const EducationPage = ({ currentUser }) => {
         }
       }
 
-      // Güvenlik kilidi: Eğer Sheets tablosundan başarılı bir şekilde en az 10 kayıt çekilebildiyse 
-      // tabloda OLMAYAN eski veritabanı kayıtlarını silerek tam senkronizasyon (sıfırlama) sağla.
       if (validRowCount > 10) {
           snapshot.docs.forEach(doc => {
               const egitim = doc.data().egitim?.toLowerCase().trim();
@@ -647,7 +664,6 @@ const EducationPage = ({ currentUser }) => {
           });
           await batch.commit();
       } else if (validRowCount > 0) {
-          // Eğer 10'dan az veri varsa sadece güncelleme/ekleme yap, tüm sistemi çökertecek silmeyi engelle.
           await batch.commit();
       }
 
@@ -662,7 +678,7 @@ const EducationPage = ({ currentUser }) => {
     syncWithSheets();
     const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
     return () => clearInterval(interval);
-  }, [currentUser]); // data.length bağımlılığı çıkarılarak gereksiz wipe döngüsü engellendi.
+  }, [currentUser]); 
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -966,7 +982,6 @@ const InstructorPage = ({ currentUser }) => {
 };
 
 const CalendarPage = ({ currentUser }) => {
-  // Yönetici ve Eğitim Takip harici roller (ör: Çekim Takip) için salt okunur
   const canEditCalendar = currentUser?.id === 'manager' || currentUser?.id === 'education';
   const isReadOnly = !canEditCalendar;
 
@@ -977,17 +992,15 @@ const CalendarPage = ({ currentUser }) => {
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* Scroll edilebilir dış kutu. İframe içinde kaydırma yapılmasını taklit etmek için 
-          içeriği suni olarak uzatır, böylece tekerlek hareketleri dış kutuyu kaydırır. */}
-      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-auto custom-scrollbar">
-        {/* İframe ve koruyucu katmanın yerleştiği çok uzun iç kutu */}
-        <div style={{ width: '100%', minWidth: '1000px', height: '1500px', position: 'relative' }}>
+      {/* SADECE BURADA 1 ADET DİKEY KAYDIRMA ÇUBUĞU ÇIKACAK ŞEKİLDE DÜZENLENDİ */}
+      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-y-auto custom-scrollbar">
+        {/* İframe kendi scroll barını göstermesin diye scrolling="no" eklendi, iç yapı 1400px yapılarak dış scroll tetiklendi */}
+        <div className="relative w-full" style={{ height: '1400px' }}>
           
-          {/* Tıklamaları YAKALAYAN Kalkan - Scroll'u engellemez çünkü parent'ta overflow var */}
+          {/* Tıklamayı ve düzenlemeyi engelleyen ama kaydırmayı engellemeyen saydam katman */}
           {isReadOnly && (
              <div 
                className="absolute inset-0 z-10 cursor-not-allowed" 
-               style={{ backgroundColor: 'transparent' }}
                title="Sadece görüntüleme yetkiniz bulunmaktadır."
              ></div>
           )}
@@ -996,6 +1009,7 @@ const CalendarPage = ({ currentUser }) => {
             src="https://meuzem.github.io/uzem_studyo/"
             className="w-full h-full border-0 absolute top-0 left-0"
             title="Studio Calendar"
+            scrolling="no"
             style={isReadOnly ? { pointerEvents: 'none' } : {}}
           />
         </div>
