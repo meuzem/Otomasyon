@@ -45,7 +45,6 @@ import {
   Menu, 
   Users, 
   ArrowUpDown, 
-  AlertCircle,
   Check
 } from 'lucide-react';
 
@@ -62,7 +61,6 @@ const firebaseConfig = {
   appId: "1:305465233892:web:7dc7505941605af4b577f1",
   measurementId: "G-SPTL6T9BZ6"
 };
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -70,14 +68,10 @@ const appId = 'uzem-takip-prod-v1';
 
 // --- Sabitler ve Listeler ---
 const ROLES = {
-  // canEdit: true -> Düzenleme yapabilir, canDelete: true -> Silme işlemini yapabilir / onaylayabilir
   EDUCATION: { id: 'education', name: 'Eğitim Takip', pass: 'no6-7', canEdit: true, canDelete: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
-  // FILMING rolüne 'calendar' erişimi eklendi
   FILMING: { id: 'filming', name: 'Çekim Takip', pass: 'ct123', canEdit: true, canDelete: false, access: ['filming', 'calendar'] },
   EDITING: { id: 'editing', name: 'Montaj Takip', pass: 'mt987', canEdit: true, canDelete: false, access: ['editing'] },
-  // Admin: Sadece Gözlemci (Excel ve Düzenleme Kapalı)
   ADMIN: { id: 'admin', name: 'Admin', pass: 'admin2025', canEdit: false, canDelete: false, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] },
-  // Yönetici: Tam Yetki
   MANAGER: { id: 'manager', name: 'Yönetici', pass: 'uzemyonetici', canEdit: true, canDelete: true, access: ['dashboard', 'education', 'filming', 'editing', 'calendar', 'instructors'] }
 };
 
@@ -148,8 +142,32 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('tr-TR');
 };
 
-// --- Bileşenler ---
+const parseCSV = (text) => {
+  const lines = text.split('\n');
+  const result = [];
+  if (lines.length < 2) return result;
+  
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  
+  for(let i = 1; i < lines.length; i++) {
+    if(!lines[i].trim()) continue;
+    
+    const currentline = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+    const obj = {};
+    
+    headers.forEach((header, index) => {
+      let val = currentline[index] ? currentline[index].trim() : '';
+      if (val.startsWith('"') && val.endsWith('"')) {
+        val = val.substring(1, val.length - 1);
+      }
+      obj[header] = val;
+    });
+    result.push(obj);
+  }
+  return result;
+};
 
+// --- Bileşenler ---
 const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -217,7 +235,6 @@ const DataTable = ({
   const [isAdding, setIsAdding] = useState(false);
   const [addForm, setAddForm] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
-
   const canEdit = currentUser?.canEdit;
   const canDelete = currentUser?.canDelete;
 
@@ -285,11 +302,9 @@ const DataTable = ({
   };
 
   const renderInput = (col, form, setForm) => {
-    // Sadece okunabilir (sistem tarafından doldurulan) alanlar için
     if (col.readOnly) {
         return <span className="text-gray-500 text-sm whitespace-nowrap">{form[col.key] || '-'}</span>;
     }
-
     if (col.type === 'select') {
       return (
         <select
@@ -420,7 +435,7 @@ const DataTable = ({
                 </td>
               </tr>
             )}
-
+            
             {filteredData.map((row, idx) => {
               const isRowEditing = isEditing === row.id;
               const rowClass = customRowClass ? customRowClass(row) : '';
@@ -444,7 +459,6 @@ const DataTable = ({
                         <div className="flex justify-center gap-1 items-center">
                             <button onClick={() => handleEditClick(row)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Düzenle"><Edit2 size={16}/></button>
                             
-                            {/* SİLME ONAY MEKANİZMASI */}
                             {row.deleteRequested ? (
                                 canDelete ? (
                                     <>
@@ -475,10 +489,10 @@ const DataTable = ({
   );
 };
 
-// 3. Pages
-
+// --- Pages ---
 const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const cols = [
     { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
@@ -493,13 +507,13 @@ const EducationPage = ({ currentUser }) => {
     { key: 'notlar', label: 'Notlar' },
   ];
 
+  // Firestore Gerçek Zamanlı Dinleme
   useEffect(() => {
     if (!currentUser) return; 
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
-      // --- ADMİN KISITLAMASI ---
       if (currentUser.id === 'admin') { 
          const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
          list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
@@ -514,6 +528,56 @@ const EducationPage = ({ currentUser }) => {
     }, (err) => console.error("Education fetch error:", err));
     return () => unsub();
   }, [currentUser]);
+
+  // Google Sheets Otomatik Senkronizasyon İşlemi
+  useEffect(() => {
+    if (!currentUser || currentUser.id === 'admin') return;
+
+    const syncWithSheets = async () => {
+      if (isSyncing) return;
+      setIsSyncing(true);
+      
+      try {
+        const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/export?format=csv&gid=1682860427";
+        const response = await fetch(sheetUrl);
+        const text = await response.text();
+        const sheetData = parseCSV(text);
+        
+        const existingEgitimler = data.map(item => item.egitim?.toLowerCase().trim());
+        
+        for (const row of sheetData) {
+          const egitimAdi = row['Eğitim'] || row['egitim']; 
+          
+          if (egitimAdi && !existingEgitimler.includes(egitimAdi.toLowerCase().trim())) {
+             const newRecord = {
+                 dal: row['Dal'] || row['dal'] || '',
+                 alan: row['Alan'] || row['alan'] || '',
+                 bolum: row['Bölüm'] || row['bolum'] || '',
+                 egitim: egitimAdi,
+                 egitmen: row['Eğitmen'] || row['egitmen'] || '',
+                 icerikTakip: row['İçerik Takip'] || row['icerikTakip'] || '',
+                 durum: row['Durum'] || row['durum'] || 'Eğitim Planlanıyor',
+                 icerikBaslama: row['İçerik Başlama'] || row['icerikBaslama'] || '',
+                 yayinTarihi: row['Yayın Tarihi'] || row['yayinTarihi'] || '',
+                 notlar: row['Notlar'] || row['notlar'] || '',
+                 createdAt: serverTimestamp(),
+                 kaynak: 'GoogleSheets'
+             };
+             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), newRecord);
+          }
+        }
+      } catch (error) {
+        console.error("Sheet otomatik veri çekme hatası:", error);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    syncWithSheets();
+    const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
+    
+    return () => clearInterval(interval);
+  }, [currentUser, data]);
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -800,7 +864,6 @@ const InstructorPage = ({ currentUser }) => {
     );
 };
 
-// CalendarPage güncellendi (currentUser alındı ve salt okunur koruması eklendi)
 const CalendarPage = ({ currentUser }) => {
   const isReadOnly = currentUser?.id === 'filming';
   
@@ -808,11 +871,9 @@ const CalendarPage = ({ currentUser }) => {
     <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
-        {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">Sadece Görüntüleme</span>}
+        {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       <div className="flex-1 bg-gray-100 rounded-lg overflow-hidden border border-gray-300 relative">
-        {/* Çekim yetkilisi için tıklamayı engelleyen görünmez katman */}
-        {isReadOnly && <div className="absolute inset-0 z-10 cursor-not-allowed"></div>}
         <iframe 
           src="https://meuzem.github.io/uzem_studyo/"
           className="w-full h-full border-0"
@@ -836,10 +897,11 @@ const DashboardPage = ({ currentUser }) => {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
-  const inFilming = filmData.filter(d => d.cekimDurumu !== 'Bitti').length;
+  // Çekimdeki Eğitim sayısını Eğitim Takip datasından (eduData) çekme:
+  const inFilming = eduData.filter(d => d.durum === 'Çekimde').length;
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   const published = eduData.filter(d => d.durum === 'Yayında').length;
-
+  
   const PREPARING_STATUSES = [
     'Eğitmen İçerik Hazırlıyor', 'Ekran Çekiminde',
     'Etkileşimli İçerik Hazırlanıyor', 'Çekim Bekliyor', 'İçerik Bitti',
@@ -848,7 +910,7 @@ const DashboardPage = ({ currentUser }) => {
     'Yayında', 'İYS Aşamasında', 'Animasyon Programı Bekliyor'
   ];
   const hazirlanan = eduData.filter(d => PREPARING_STATUSES.includes(d.durum)).length;
-
+  
   const eduStatusCounts = eduData.reduce((acc, curr) => {
     const s = curr.durum || 'Belirsiz';
     acc[s] = (acc[s] || 0) + 1;
@@ -912,7 +974,6 @@ const DashboardPage = ({ currentUser }) => {
 };
 
 // --- Main App Shell ---
-
 export default function App() {
   const [userRole, setUserRole] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -958,14 +1019,12 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans overflow-hidden relative">
-      
       {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-20 md:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
-
       <div className={`
         fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white flex flex-col shadow-xl transform transition-transform duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -995,7 +1054,6 @@ export default function App() {
             </button>
           ))}
         </nav>
-
         <div className="p-4 border-t border-slate-800">
           <div className="bg-slate-800 rounded-lg p-3 mb-3">
             <div className="text-xs text-slate-400">Giriş Yapan</div>
@@ -1009,7 +1067,6 @@ export default function App() {
           </button>
         </div>
       </div>
-
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="bg-white h-16 border-b border-gray-200 flex items-center justify-between px-4 md:px-8 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -1024,13 +1081,11 @@ export default function App() {
              {new Date().toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </header>
-
         <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
           {activeTab === 'dashboard' && <div className="h-full overflow-y-auto custom-scrollbar"><DashboardPage currentUser={userRole} /></div>}
           {activeTab === 'education' && <EducationPage currentUser={userRole} />}
           {activeTab === 'filming' && <FilmingPage currentUser={userRole} />}
           {activeTab === 'editing' && <EditingPage currentUser={userRole} />}
-          {/* CalendarPage bileşenine currentUser gönderildi */}
           {activeTab === 'calendar' && <CalendarPage currentUser={userRole} />}
           {activeTab === 'instructors' && <InstructorPage currentUser={userRole} />}
         </main>
