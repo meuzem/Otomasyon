@@ -145,8 +145,9 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('tr-TR');
 };
 
-const parseCSVToArray = (text) => {
-  const result = [];
+// Geliştirilmiş, başlıktaki virgül ve noktalama işaretlerini süzen CSV ayrıştırıcı
+const parseCSVToObjects = (text) => {
+  const lines = [];
   let row = [];
   let inQuotes = false;
   let val = '';
@@ -164,7 +165,7 @@ const parseCSVToArray = (text) => {
     } else if ((char === '\n' || char === '\r') && !inQuotes) {
       if (char === '\r' && nextChar === '\n') i++;
       row.push(val.trim());
-      result.push(row);
+      lines.push(row);
       row = [];
       val = '';
     } else {
@@ -173,7 +174,25 @@ const parseCSVToArray = (text) => {
   }
   if (val !== '' || row.length > 0) {
     row.push(val.trim());
-    result.push(row);
+    lines.push(row);
+  }
+
+  if (lines.length < 2) return [];
+
+  // Başlıklardaki tüm virgül, boşluk ve özel karakterleri sil, sadece Türkçe ve Latin harfleri tut
+  const normalize = (h) => (h || '').toLowerCase().replace(/[^a-z0-9ğüşıöç]/g, '');
+  const headers = lines[0].map(normalize);
+  
+  const result = [];
+  for (let i = 1; i < lines.length; i++) {
+    const currentLine = lines[i];
+    if (currentLine.length === 1 && currentLine[0] === '') continue; // Boş satırları atla
+    
+    const obj = {};
+    headers.forEach((header, index) => {
+       obj[header] = currentLine[index] || '';
+    });
+    result.push(obj);
   }
   return result;
 };
@@ -200,7 +219,7 @@ const Login = ({ onLogin }) => {
           <div className="flex justify-center mb-4">
              <img src="/logo.png" alt="İBB Logo" className="h-24 object-contain" onError={(e) => {e.target.onerror = null; e.target.src="https://placehold.co/100x100?text=Logo"}} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">UZEM Eğitim Takip Sistemi</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Eİİ UZEM Eğitim Takip</h1>
           <p className="text-gray-500 mt-2">Yetkili Girişi</p>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
@@ -271,7 +290,7 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // 1. PINNED BOTTOM GRUBU: Eğitim Beklemede, Eğitmen Ayrıldı, İptal, Yayında
+      // ALTTA SABİTLENECEK DURUMLAR (Eğitim Takip Sayfası için)
       const getBottomOrder = (status) => {
         if (status === 'Eğitim Beklemede') return 1;
         if (status === 'Eğitmen Ayrıldı') return 2;
@@ -283,20 +302,15 @@ const DataTable = ({
       const aOrder = getBottomOrder(a.durum);
       const bOrder = getBottomOrder(b.durum);
 
-      // İkisi de pinned gruptaysa harf sırası/öncelik sırasına göre sırala
       if (aOrder > 0 && bOrder > 0) {
          if (aOrder > bOrder) return 1;
          if (aOrder < bOrder) return -1;
          return 0;
       }
-      
-      // Sadece A pinned ise A alta gider
       if (aOrder > 0) return 1;
-      
-      // Sadece B pinned ise B alta gider
       if (bOrder > 0) return -1;
 
-      // Çekim/Montaj sayfaları için Bitti iğnelemesi
+      // Çekim/Montaj sayfaları için "Bitti" iğnelemesi
       const isPinned = (row, key) => {
           if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
           if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
@@ -484,7 +498,12 @@ const DataTable = ({
                   <td className="p-3 text-center text-gray-500">{idx + 1}</td>
                   {columns.map(col => (
                     <td key={col.key} className="p-3 align-top">
-                      {isRowEditing ? renderInput(col, editForm, setEditForm) : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])}
+                      {isRowEditing ? renderInput(col, editForm, setEditForm) : (
+                          // Notlar alanının alt satırlara inerek uzamasını (wrap) sağlayan kod
+                          col.key === 'notlar' 
+                            ? <div className="min-w-[200px] max-w-[300px] whitespace-pre-wrap break-words text-sm leading-relaxed">{row[col.key]}</div> 
+                            : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])
+                      )}
                     </td>
                   ))}
                   {canEdit && (
@@ -555,7 +574,6 @@ const EducationPage = ({ currentUser }) => {
     const unsub = onSnapshot(q, (snap) => {
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
-      // Admin görünürlük ayarı
       if (currentUser.id === 'admin') { 
          const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
          list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
@@ -574,8 +592,8 @@ const EducationPage = ({ currentUser }) => {
       const response = await fetch(sheetUrl);
       const text = await response.text();
       
-      const sheetData = parseCSVToArray(text);
-      if (sheetData.length <= 1) {
+      const sheetData = parseCSVToObjects(text);
+      if (sheetData.length === 0) {
           setIsSyncing(false);
           return;
       }
@@ -587,25 +605,25 @@ const EducationPage = ({ currentUser }) => {
           batch.delete(docSnap.ref);
       });
 
-      for (let i = 1; i < sheetData.length; i++) {
-        const row = sheetData[i];
-        if (!row || row.length < 4 || !row[3]) continue; 
+      for (const row of sheetData) {
+        const egitimAdi = row['eğitim'] || row['egitim'] || row['egitimadi'];
+        if (!egitimAdi) continue; 
         
         const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
         batch.set(newRef, {
-             dal: row[0] || '',
-             alan: row[1] || '',
-             bolum: row[2] || '',
-             egitim: row[3] || '',
-             egitmen: row[4] || '',
-             icerikTakip: row[5] || '',
-             durum: row[6] || 'Eğitim Planlanıyor',
-             icerikBaslama: row[7] || '',
-             cekimBaslama: row[8] || '',
-             montajBaslama: row[9] || '',
-             montajSorumlusu: row[10] || '',
-             yayinTarihi: row[11] || '',
-             notlar: row[12] || '',
+             dal: row['daladı'] || row['daladi'] || row['dal'] || '',
+             alan: row['alanadı'] || row['alanadi'] || row['alan'] || '',
+             bolum: row['bölüm'] || row['bolum'] || '',
+             egitim: egitimAdi,
+             egitmen: row['eğitmen'] || row['egitmen'] || '',
+             icerikTakip: row['içeriktakip'] || row['iceriktakip'] || '',
+             durum: row['durum'] || 'Eğitim Planlanıyor',
+             icerikBaslama: row['içerikbaşlamatarihi'] || row['icerikbaslama'] || '',
+             cekimBaslama: row['çekimbaşlamatarihi'] || row['cekimbaslama'] || '',
+             montajBaslama: row['montajbaşlamatarihi'] || row['montajbaslama'] || '',
+             montajSorumlusu: row['montajsorumlusu'] || '',
+             yayinTarihi: row['yayıntarihi'] || row['yayintarihi'] || '',
+             notlar: row['notlar'] || '',
              createdAt: serverTimestamp(),
              kaynak: 'GoogleSheets'
         });
@@ -677,7 +695,7 @@ const EducationPage = ({ currentUser }) => {
       extraHeaderActions={syncButton}
       customRowClass={(row) => {
           if (row.deleteRequested) return 'bg-red-50 border-red-200';
-          if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-100 border-blue-200 text-blue-900';
+          if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-50 border-blue-200 text-blue-900';
           if (row.durum === 'Eğitim Beklemede') return 'bg-orange-100 border-orange-200 text-orange-900';
           if (row.durum === 'İptal') return 'bg-gray-200 border-gray-300 text-gray-700';
           if (row.durum === 'Yayında') return 'bg-green-50 border-green-200';
@@ -864,7 +882,7 @@ const EditingPage = ({ currentUser }) => {
 };
 
 const InstructorPage = ({ currentUser }) => {
-    const [data, useState] = useState([]);
+    const [data, setData] = useState([]);
     
     const cols = [
         { key: 'egitmen', label: 'Eğitmen', sortable: true },
@@ -928,28 +946,37 @@ const InstructorPage = ({ currentUser }) => {
 };
 
 const CalendarPage = ({ currentUser }) => {
-  // Yönetici ve Çekim Sorumlusu (filming) hariç herkes için salt okunur (tıklanmaz, sadece görünür)
   const canEditCalendar = currentUser?.id === 'manager' || currentUser?.id === 'education';
   
   return (
     <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col relative">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
-        {!canEditCalendar && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">Sadece Görüntüleme</span>}
+        {!canEditCalendar && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-hidden">
-        {/*
-          pointer-events: none => Çekim Takip (filming) iframe içindeki Google butonlarına veya takvim günlerine tıklayamaz, etkinlik ekleyemez/düzenleyemez.
-          Böylece sadece okuma (view-only) sağlanmış olur.
-          Aynı zamanda dıştaki wrapper kaydırmayı engellemez.
-        */}
-        <iframe 
-          src="https://meuzem.github.io/uzem_studyo/"
-          className="w-full h-full border-0"
-          title="Studio Calendar"
-          style={!canEditCalendar ? { pointerEvents: 'none' } : {}}
-        />
+      {/* 
+        Scroll edilebilir dış kutu. İframe içinde kaydırma yapılmasını taklit etmek için 
+        içeriği suni olarak uzatır, böylece tekerlek hareketleri dış kutuyu kaydırır.
+      */}
+      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-y-auto custom-scrollbar">
+        {/* İframe ve koruyucu katmanın yerleştiği çok uzun iç kutu */}
+        <div style={{ height: '2200px', position: 'relative' }}>
+          
+          {/* Tıklamaları YAKALAYAN Kalkan - Scroll'u engellemez çünkü parent'ta overflow var */}
+          {!canEditCalendar && (
+             <div 
+               className="absolute inset-0 z-10" 
+               title="Sadece görüntüleme yetkiniz bulunmaktadır."
+             ></div>
+          )}
+          
+          <iframe 
+            src="https://meuzem.github.io/uzem_studyo/"
+            className="w-full h-full border-0 absolute top-0 left-0"
+            title="Studio Calendar"
+          />
+        </div>
       </div>
     </div>
   );
