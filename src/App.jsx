@@ -272,7 +272,7 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // ALTTA SABİTLENECEK DURUMLAR (Eğitim Takip Sayfası için)
+      // 1. PINNED BOTTOM GRUBU: Ne sıralanırsa sıralansın bu 4 durum harf sırasına göre en altta yer alır
       const getBottomOrder = (status) => {
         if (status === 'Eğitim Beklemede') return 1;
         if (status === 'Eğitmen Ayrıldı') return 2;
@@ -481,6 +481,7 @@ const DataTable = ({
                   {columns.map(col => (
                     <td key={col.key} className="p-3 align-top">
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (
+                          // Notlar alanının alt satırlara inerek uzamasını (wrap) sağlayan kod bloğu
                           col.key === 'notlar' 
                             ? <div className="min-w-[200px] max-w-[400px] whitespace-pre-wrap break-words text-sm leading-relaxed">{row[col.key]}</div> 
                             : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])
@@ -573,16 +574,17 @@ const EducationPage = ({ currentUser }) => {
       const response = await fetch(sheetUrl);
       const text = await response.text();
       
+      // Güvenlik: Eğer yetki hatası yüzünden HTML (login vb.) dönerse veri silmeyi engelle.
       if (text.toLowerCase().includes('<!doctype html>') || text.toLowerCase().includes('<html')) {
-          console.error("Geçersiz veri veya erişim engellendi (HTML döndü).");
-          setIsSyncing(false);
-          return;
+         console.error("Geçersiz veri veya erişim engellendi (HTML döndü).");
+         setIsSyncing(false);
+         return;
       }
 
       const sheetData = parseCSV(text);
       if (sheetData.length < 2) {
-          setIsSyncing(false);
-          return;
+         setIsSyncing(false);
+         return;
       }
 
       const batch = writeBatch(db);
@@ -590,14 +592,16 @@ const EducationPage = ({ currentUser }) => {
       
       const existingDocs = {};
       snapshot.docs.forEach(doc => {
-          existingDocs[doc.data().egitim?.toLowerCase().trim()] = doc;
+         existingDocs[doc.data().egitim?.toLowerCase().trim()] = doc;
       });
 
       const currentSheetEgitimler = new Set();
       let validRowCount = 0;
 
+      // Sütunların indeks sıralamasıyla direkt okuma (Virgül ve başlık adı hatalarına karşı tam koruma)
       for (let i = 1; i < sheetData.length; i++) {
         const row = sheetData[i];
+        // 3. indeks = EĞİTİM
         if (!row || row.length < 4 || !row[3] || row[3].trim() === '') continue; 
         
         const egitimAdi = row[3].trim();
@@ -610,7 +614,7 @@ const EducationPage = ({ currentUser }) => {
              bolum: row[2]?.trim() || '',
              egitim: egitimAdi,
              egitmen: row[4]?.trim() || '',
-             icerikTakip: row[5]?.trim() || '', 
+             icerikTakip: row[5]?.trim() || '', // 5. İndeks = İÇERİK TAKİP
              durum: row[6]?.trim() || 'Eğitim Planlanıyor',
              icerikBaslama: parseDate(row[7]?.trim()),
              cekimBaslama: parseDate(row[8]?.trim()),
@@ -624,24 +628,27 @@ const EducationPage = ({ currentUser }) => {
 
         const existingDoc = existingDocs[egitimAdi.toLowerCase()];
         if (existingDoc) {
-           batch.update(existingDoc.ref, recordData);
+          batch.update(existingDoc.ref, recordData);
         } else {
-           recordData.createdAt = serverTimestamp();
-           const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
-           batch.set(newRef, recordData);
+          recordData.createdAt = serverTimestamp();
+          const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
+          batch.set(newRef, recordData);
         }
       }
 
+      // Güvenlik kilidi: Eğer Sheets tablosundan başarılı bir şekilde en az 10 kayıt çekilebildiyse 
+      // tabloda OLMAYAN eski veritabanı kayıtlarını silerek tam senkronizasyon (sıfırlama) sağla.
       if (validRowCount > 10) {
-          snapshot.docs.forEach(doc => {
-              const egitim = doc.data().egitim?.toLowerCase().trim();
-              if (egitim && !currentSheetEgitimler.has(egitim)) {
-                  batch.delete(doc.ref);
-              }
-          });
-          await batch.commit();
+         snapshot.docs.forEach(doc => {
+             const egitim = doc.data().egitim?.toLowerCase().trim();
+             if (egitim && !currentSheetEgitimler.has(egitim)) {
+                 batch.delete(doc.ref);
+             }
+         });
+         await batch.commit();
       } else if (validRowCount > 0) {
-          await batch.commit();
+         // Eğer 10'dan az veri varsa sadece güncelleme/ekleme yap, tüm sistemi çökertecek silmeyi engelle.
+         await batch.commit();
       }
 
     } catch (error) {
@@ -684,10 +691,10 @@ const EducationPage = ({ currentUser }) => {
 
   const syncButton = currentUser?.canEdit ? (
     <button 
-      onClick={syncWithSheets} 
-      disabled={isSyncing}
-      className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
-      title="Google Sheets'ten verileri zorla güncelle (Eskiler Silinir, Yeniler Eklenir)"
+     onClick={syncWithSheets} 
+     disabled={isSyncing}
+     className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
+     title="Google Sheets'ten verileri zorla güncelle (Eskiler Silinir, Yeniler Eklenir)"
     >
         <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
         {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek ve Sıfırla'}
@@ -696,25 +703,25 @@ const EducationPage = ({ currentUser }) => {
 
   return (
     <DataTable
-      title="Eğitim Takip Listesi"
+     title="Eğitim Takip Listesi"
       columns={cols}
       data={data}
-      onAdd={handleAdd}
-      onUpdate={handleUpdate}
-      onDelete={handleDelete}
-      onRequestDelete={handleRequestDelete}
-      onApproveDelete={handleApproveDelete}
-      onRejectDelete={handleRejectDelete}
-      extraHeaderActions={syncButton}
-      customRowClass={(row) => {
-          if (row.deleteRequested) return 'bg-red-50 border-red-200';
-          if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-100 border-blue-200 text-blue-900';
-          if (row.durum === 'Eğitim Beklemede') return 'bg-orange-100 border-orange-200 text-orange-900';
-          if (row.durum === 'İptal') return 'bg-gray-200 border-gray-300 text-gray-700';
-          if (row.durum === 'Yayında') return 'bg-green-50 border-green-200 text-green-900';
-          return '';
-      }}
-      currentUser={currentUser}
+     onAdd={handleAdd}
+     onUpdate={handleUpdate}
+     onDelete={handleDelete}
+     onRequestDelete={handleRequestDelete}
+     onApproveDelete={handleApproveDelete}
+     onRejectDelete={handleRejectDelete}
+     extraHeaderActions={syncButton}
+     customRowClass={(row) => {
+         if (row.deleteRequested) return 'bg-red-50 border-red-200';
+         if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-50 border-blue-200 text-blue-900';
+         if (row.durum === 'Eğitim Beklemede') return 'bg-orange-50 border-orange-200 text-orange-900';
+         if (row.durum === 'İptal') return 'bg-gray-100 border-gray-300 text-gray-700';
+         if (row.durum === 'Yayında') return 'bg-green-50 border-green-200 text-green-900';
+         return '';
+     }}
+     currentUser={currentUser}
     />
   );
 };
@@ -959,7 +966,7 @@ const InstructorPage = ({ currentUser }) => {
 };
 
 const CalendarPage = ({ currentUser }) => {
-  // Yönetici ve Eğitim Takip haricindeki roller için salt okunur
+  // Yönetici ve Eğitim Takip harici roller (ör: Çekim Takip) için salt okunur
   const canEditCalendar = currentUser?.id === 'manager' || currentUser?.id === 'education';
   const isReadOnly = !canEditCalendar;
 
@@ -970,21 +977,18 @@ const CalendarPage = ({ currentUser }) => {
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* Kaydırma alanını sağlayan dış kapsayıcı */}
-      <div className="flex-1 bg-gray-100 rounded-lg overflow-auto border border-gray-300 relative custom-scrollbar">
-        {/* İframe içeriğinin kaydırılabilir olmasını taklit eden, boyutlandırılmış iç alan */}
-        <div style={{ width: '100%', minWidth: '1000px', height: '1500px', position: 'relative' }}>
+      {/* overflow-auto eklenerek dış div'in kaydırılabilir olması sağlandı */}
+      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-auto custom-scrollbar">
+        {/* İçerik boyutlandırılarak farenin dış div'i kaydırması sağlandı (1200x1200 piksel) */}
+        <div style={{ minWidth: '100%', minHeight: '100%', width: '1200px', height: '1200px', position: 'relative' }}>
           
-          {/* Tıklamaları emen ancak scroll işlemini engellemeyen koruyucu katman */}
           {isReadOnly && (
-             <div 
-               className="absolute inset-0 z-10 cursor-not-allowed" 
-               style={{ backgroundColor: 'transparent' }}
-               title="Sadece görüntüleme yetkiniz bulunmaktadır."
-             ></div>
+            <div 
+              className="absolute inset-0 z-10 cursor-default" 
+              title="Sadece görüntüleme yetkiniz bulunmaktadır."
+            ></div>
           )}
           
-          {/* iframe üzerinden tıklama yetkisi tamamen kaldırılır */}
           <iframe 
             src="https://meuzem.github.io/uzem_studyo/"
             className="w-full h-full border-0 absolute top-0 left-0"
