@@ -45,7 +45,8 @@ import {
   Menu, 
   Users, 
   ArrowUpDown,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 
 // --- ChartJS Registration ---
@@ -244,7 +245,8 @@ const DataTable = ({
   onApproveDelete,
   onRejectDelete, 
   customRowClass, 
-  currentUser 
+  currentUser,
+  extraHeaderActions
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(null); 
@@ -264,7 +266,7 @@ const DataTable = ({
   };
 
   const filteredData = useMemo(() => {
-    let processedData = data;
+    let processedData = [...data];
     
     if (searchTerm) {
       const lowerTerm = searchTerm.toLowerCase();
@@ -275,28 +277,32 @@ const DataTable = ({
       );
     }
 
-    if (sortConfig.key) {
-      processedData.sort((a, b) => {
+    processedData.sort((a, b) => {
+      // YAYINDA DURUMU HER ZAMAN EN ALTTA KALACAK (NE SIRALANIRSA SIRALANSIN)
+      if (a.durum === 'Yayında' && b.durum !== 'Yayında') return 1;
+      if (a.durum !== 'Yayında' && b.durum === 'Yayında') return -1;
+      
+      // Çekim veya Montaj sayfaları için Bitti iğnelemesi
+      const isPinned = (row, key) => {
+          if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
+          if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
+          return false;
+      };
+
+      if (sortConfig.key) {
+        const aPinned = isPinned(a, sortConfig.key);
+        const bPinned = isPinned(b, sortConfig.key);
+        if (aPinned && !bPinned) return 1; 
+        if (!aPinned && bPinned) return -1;
+
         const valA = a[sortConfig.key] ? a[sortConfig.key].toString() : "";
         const valB = b[sortConfig.key] ? b[sortConfig.key].toString() : "";
         
-        const isPinnedBottom = (row, key) => {
-            if (key === 'durum' && row.durum === 'Yayında') return true;
-            if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
-            if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
-            return false;
-        };
-        const aPinned = isPinnedBottom(a, sortConfig.key);
-        const bPinned = isPinnedBottom(b, sortConfig.key);
-        
-        if (aPinned && !bPinned) return 1; 
-        if (!aPinned && bPinned) return -1;
-        
         if (valA.toLowerCase() < valB.toLowerCase()) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (valA.toLowerCase() > valB.toLowerCase()) return sortConfig.direction === 'ascending' ? 1 : -1;
-        return 0;
-      });
-    }
+      }
+      return 0;
+    });
 
     return processedData;
   }, [data, searchTerm, sortConfig]);
@@ -401,6 +407,8 @@ const DataTable = ({
             />
           </div>
           
+          {extraHeaderActions}
+
           {canEdit && (
             <button onClick={() => exportToExcel(filteredData, title)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors">
                 <Download size={16} /> Excel
@@ -511,18 +519,21 @@ const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Arayüzdeki başlıklar eski haliyle (daha okunaklı) bırakıldı, eşleştirme parse kısmında yapıldı.
+  // Google Sheets sütunlarına birebir uyarlanmış başlıklar
   const cols = [
-    { key: 'dal', label: 'Dal', type: 'select', options: LOOKUPS.DAL },
-    { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
-    { key: 'bolum', label: 'Bölüm' },
-    { key: 'egitim', label: 'Eğitim' },
-    { key: 'egitmen', label: 'Eğitmen', sortable: true },
-    { key: 'icerikTakip', label: 'İçerik Takip', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
-    { key: 'durum', label: 'Durum', type: 'select', options: LOOKUPS.DURUM_GENEL, sortable: true },
-    { key: 'icerikBaslama', label: 'İçerik Başlama', type: 'date' },
-    { key: 'yayinTarihi', label: 'Yayın Tarihi', type: 'date' },
-    { key: 'notlar', label: 'Notlar' },
+    { key: 'dal', label: 'DAL ADI', type: 'select', options: LOOKUPS.DAL },
+    { key: 'alan', label: 'ALAN ADI', type: 'select', options: LOOKUPS.ALAN, sortable: true },
+    { key: 'bolum', label: 'BÖLÜM' },
+    { key: 'egitim', label: 'EĞİTİM' },
+    { key: 'egitmen', label: 'EĞİTMEN', sortable: true },
+    { key: 'icerikTakip', label: 'İÇERİK TAKİP', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
+    { key: 'durum', label: 'DURUM', type: 'select', options: LOOKUPS.DURUM_GENEL, sortable: true },
+    { key: 'icerikBaslama', label: 'İÇERİK BAŞLAMA TARİHİ', type: 'date' },
+    { key: 'cekimBaslama', label: 'ÇEKİM BAŞLAMA TARİHİ', type: 'date' },
+    { key: 'montajBaslama', label: 'MONTAJ BAŞLAMA TARİHİ', type: 'date' },
+    { key: 'montajSorumlusu', label: 'MONTAJ SORUMLUSU', type: 'select', options: LOOKUPS.MONTAJ_SORUMLUSU },
+    { key: 'yayinTarihi', label: 'YAYIN TARİHİ', type: 'date' },
+    { key: 'notlar', label: 'NOTLAR' },
   ];
 
   useEffect(() => {
@@ -535,77 +546,83 @@ const EducationPage = ({ currentUser }) => {
          const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
          list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
       }
-      
-      list.sort((a, b) => {
-        if (a.durum === 'Yayında' && b.durum !== 'Yayında') return 1;
-        if (a.durum !== 'Yayında' && b.durum === 'Yayında') return -1;
-        return 0;
-      });
       setData(list);
     }, (err) => console.error("Education fetch error:", err));
     return () => unsub();
   }, [currentUser]);
 
-  useEffect(() => {
-    if (!currentUser || currentUser.id === 'admin') return;
-
-    const syncWithSheets = async () => {
-      if (isSyncing) return;
-      setIsSyncing(true);
+  const syncWithSheets = async () => {
+    if (isSyncing || currentUser?.id === 'admin') return;
+    setIsSyncing(true);
+    
+    try {
+      const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/gviz/tq?tqx=out:csv&gid=1682860427";
+      const response = await fetch(sheetUrl);
+      const text = await response.text();
+      const sheetData = parseCSV(text);
       
-      try {
-        const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/gviz/tq?tqx=out:csv&gid=1682860427";
-        const response = await fetch(sheetUrl);
-        const text = await response.text();
-        const sheetData = parseCSV(text);
+      const normalizeHeader = (h) => h.toLowerCase().replace(/[\s,]/g, '');
+      const getValue = (row, possibleNames) => {
+          const key = Object.keys(row).find(k => possibleNames.includes(normalizeHeader(k)));
+          return key ? row[key] : '';
+      };
+
+      const sheetEgitimler = [];
+
+      // Güncelleme veya Ekleme İşlemi
+      for (const row of sheetData) {
+        const egitimAdi = getValue(row, ['eğitim', 'egitim']);
+        if (!egitimAdi) continue; 
         
-        // E-Tablodaki başlıklarda boşluk ve noktalama işaretlerini silip eşleştirme yapar
-        const normalizeHeader = (h) => h.toLowerCase().replace(/[\s,]/g, '');
-        const getValue = (row, possibleNames) => {
-            const key = Object.keys(row).find(k => possibleNames.includes(normalizeHeader(k)));
-            return key ? row[key] : '';
+        sheetEgitimler.push(egitimAdi.toLowerCase().trim());
+
+        const recordData = {
+           dal: getValue(row, ['daladı', 'daladi', 'dal']),
+           alan: getValue(row, ['alanadı', 'alanadi', 'alan']),
+           bolum: getValue(row, ['bölüm', 'bolum']),
+           egitim: egitimAdi,
+           egitmen: getValue(row, ['eğitmen', 'egitmen']),
+           icerikTakip: getValue(row, ['içeriktakip', 'iceriktakip', 'içeriktaki,p', 'i̇çeri̇ktaki̇,p']),
+           durum: getValue(row, ['durum']) || 'Eğitim Planlanıyor',
+           icerikBaslama: getValue(row, ['içerikbaşlamatarihi', 'icerikbaslamatarihi']),
+           cekimBaslama: getValue(row, ['çekimbaşlamatarihi', 'cekimbaslamatarihi']),
+           montajBaslama: getValue(row, ['montajbaşlamatarihi', 'montajbaslamatarihi']),
+           montajSorumlusu: getValue(row, ['montajsorumlusu']),
+           yayinTarihi: getValue(row, ['yayıntarihi', 'yayintarihi']),
+           notlar: getValue(row, ['notlar']),
+           updatedAt: serverTimestamp(),
+           kaynak: 'GoogleSheets'
         };
 
-        for (const row of sheetData) {
-          const egitimAdi = getValue(row, ['eğitim', 'egitim']);
-          if (!egitimAdi) continue; 
-          
-          const recordData = {
-             dal: getValue(row, ['daladı', 'daladi']),
-             alan: getValue(row, ['alanadı', 'alanadi']),
-             bolum: getValue(row, ['bölüm', 'bolum']),
-             egitim: egitimAdi,
-             egitmen: getValue(row, ['eğitmen', 'egitmen']),
-             icerikTakip: getValue(row, ['içeriktakip', 'iceriktakip', 'içeriktaki,p', 'i̇çeri̇ktaki̇,p']),
-             durum: getValue(row, ['durum']) || 'Eğitim Planlanıyor',
-             icerikBaslama: getValue(row, ['içerikbaşlamatarihi', 'icerikbaslamatarihi']),
-             yayinTarihi: getValue(row, ['yayıntarihi', 'yayintarihi']),
-             notlar: getValue(row, ['notlar']),
-             updatedAt: serverTimestamp(),
-             kaynak: 'GoogleSheets'
-          };
-
-          const existingRecord = data.find(item => item.egitim?.toLowerCase().trim() === egitimAdi.toLowerCase().trim());
-          
-          if (existingRecord) {
-             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', existingRecord.id), recordData);
-          } else {
-             recordData.createdAt = serverTimestamp();
-             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), recordData);
-          }
+        const existingRecord = data.find(item => item.egitim?.toLowerCase().trim() === egitimAdi.toLowerCase().trim());
+        
+        if (existingRecord) {
+           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', existingRecord.id), recordData);
+        } else {
+           recordData.createdAt = serverTimestamp();
+           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), recordData);
         }
-      } catch (error) {
-        console.error("Sheet otomatik veri çekme hatası:", error);
-      } finally {
-        setIsSyncing(false);
       }
-    };
 
+      // Tablodan Silinmiş Olanları Uygulamadan da Sil (Tam Aynalama)
+      for (const item of data) {
+          if (!sheetEgitimler.includes(item.egitim?.toLowerCase().trim())) {
+              await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', item.id));
+          }
+      }
+
+    } catch (error) {
+      console.error("Sheet otomatik veri çekme hatası:", error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
     syncWithSheets();
     const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
-    
     return () => clearInterval(interval);
-  }, [currentUser, data]); 
+  }, [currentUser, data.length]); 
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -632,6 +649,18 @@ const EducationPage = ({ currentUser }) => {
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', id), { deleteRequested: false });
   };
 
+  const syncButton = currentUser?.canEdit ? (
+    <button 
+      onClick={syncWithSheets} 
+      disabled={isSyncing}
+      className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
+      title="Google Sheets'ten verileri zorla güncelle"
+    >
+        <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+        {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek'}
+    </button>
+  ) : null;
+
   return (
     <DataTable
       title="Eğitim Takip Listesi"
@@ -643,6 +672,7 @@ const EducationPage = ({ currentUser }) => {
       onRequestDelete={handleRequestDelete}
       onApproveDelete={handleApproveDelete}
       onRejectDelete={handleRejectDelete}
+      extraHeaderActions={syncButton}
       customRowClass={(row) => {
           if (row.deleteRequested) return 'bg-red-50 border-red-200';
           if (row.durum === 'Yayında') return 'bg-green-50 border-green-200';
@@ -896,20 +926,23 @@ const CalendarPage = ({ currentUser }) => {
   const isReadOnly = currentUser?.id === 'filming';
   
   return (
-    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
+    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col relative">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-hidden">
-        {/* CSS pointer-events: none ile tıklamalar iframe'e geçmez ancak dış div scroll'u kullanılabilir. */}
-        <iframe 
-          src="https://meuzem.github.io/uzem_studyo/"
-          className="w-full h-full border-0"
-          title="Studio Calendar"
-          style={isReadOnly ? { pointerEvents: 'none' } : {}}
-        />
+      {/* Scroll bar sağlayan dış kapsayıcı div */}
+      <div className="flex-1 bg-gray-100 rounded-lg overflow-auto border border-gray-300 relative custom-scrollbar">
+        {/* İframe'i gerçek boyutundan büyük yaparak iç scroll'u iptal eden ve dış kapsayıcıda kaydırmayı sağlayan iç div */}
+        <div style={{ minWidth: '1000px', height: '1500px', position: 'relative' }}>
+          <iframe 
+            src="https://meuzem.github.io/uzem_studyo/"
+            className="w-full h-full border-0"
+            title="Studio Calendar"
+            style={isReadOnly ? { pointerEvents: 'none' } : {}}
+          />
+        </div>
       </div>
     </div>
   );
