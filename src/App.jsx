@@ -97,7 +97,7 @@ const LOOKUPS = {
     'Çekim Bekliyor', 'Çekimde', 'Çekim Bitti', 'Çekim Revize', 'İçerik Bitti', 'Ses Çekimi Bekleniyor',
     'İçerik Kontrolü', 'İçerik Revize', 'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'Montajda',
     'Montaj Kontrolü', 'Montaj Revize', 'ID Bekliyor', 'Yayında', 'Eğitim Beklemede', 'İptal',
-    'İYS Aşamasında', 'Animasyon Programı Bekliyor'
+    'İYS Aşamasında', 'Animasyon Programı Bekliyor', 'Eğitmen Ayrıldı'
   ],
   MONTAJ_SORUMLUSU: ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yıkılmaz', 'Cihan Çimen'],
   CEKIM_SORUMLUSU: ['Gülnur Köse', 'Sadi Demirci', 'Soner Ulu'],
@@ -145,7 +145,6 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('tr-TR');
 };
 
-// Başlıklara değil sadece virgüllere bağlı Dizi ayrıştırıcı (Virgüllü hatalara karşı korumalı)
 const parseCSVToArray = (text) => {
   const result = [];
   let row = [];
@@ -272,10 +271,32 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // YAYINDA DURUMU EN ALTTA KALACAK KESİN KURAL
-      if (a.durum === 'Yayında' && b.durum !== 'Yayında') return 1;
-      if (a.durum !== 'Yayında' && b.durum === 'Yayında') return -1;
+      // 1. PINNED BOTTOM GRUBU: Eğitim Beklemede, Eğitmen Ayrıldı, İptal, Yayında
+      const getBottomOrder = (status) => {
+        if (status === 'Eğitim Beklemede') return 1;
+        if (status === 'Eğitmen Ayrıldı') return 2;
+        if (status === 'İptal') return 3;
+        if (status === 'Yayında') return 4;
+        return 0; // Pinned değil
+      };
+
+      const aOrder = getBottomOrder(a.durum);
+      const bOrder = getBottomOrder(b.durum);
+
+      // İkisi de pinned gruptaysa harf sırası/öncelik sırasına göre sırala
+      if (aOrder > 0 && bOrder > 0) {
+         if (aOrder > bOrder) return 1;
+         if (aOrder < bOrder) return -1;
+         return 0;
+      }
       
+      // Sadece A pinned ise A alta gider
+      if (aOrder > 0) return 1;
+      
+      // Sadece B pinned ise B alta gider
+      if (bOrder > 0) return -1;
+
+      // Çekim/Montaj sayfaları için Bitti iğnelemesi
       const isPinned = (row, key) => {
           if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
           if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
@@ -512,7 +533,6 @@ const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Tablo başlıkları Google Sheets'in sütun sırası ile tamamen aynı
   const cols = [
     { key: 'dal', label: 'DAL ADI', type: 'select', options: LOOKUPS.DAL },
     { key: 'alan', label: 'ALAN ADI', type: 'select', options: LOOKUPS.ALAN, sortable: true },
@@ -535,6 +555,7 @@ const EducationPage = ({ currentUser }) => {
     const unsub = onSnapshot(q, (snap) => {
       let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       
+      // Admin görünürlük ayarı
       if (currentUser.id === 'admin') { 
          const HIDDEN_STATUSES = ['Eğitim Planlanıyor', 'Eğitim Beklemede', 'İptal'];
          list = list.filter(item => !HIDDEN_STATUSES.includes(item.durum));
@@ -544,7 +565,6 @@ const EducationPage = ({ currentUser }) => {
     return () => unsub();
   }, [currentUser]);
 
-  // Tüm Veritabanını Google Sheets ile Sıfırlayarak Yeniden Senkronize Et
   const syncWithSheets = async () => {
     if (isSyncing || currentUser?.id === 'admin') return;
     setIsSyncing(true);
@@ -562,17 +582,14 @@ const EducationPage = ({ currentUser }) => {
 
       const batch = writeBatch(db);
 
-      // MEVCUT TÜM VERİLERİ SİL (TAM SIFIRLAMA)
       const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
       snapshot.docs.forEach((docSnap) => {
           batch.delete(docSnap.ref);
       });
 
-      // E-TABLODAKİ TÜM VERİLERİ BİREBİR EKLE
-      // İndeks sırasıyla çekerek "İÇERİK TAKİ,P" gibi header hatalarının önüne geçilir
       for (let i = 1; i < sheetData.length; i++) {
         const row = sheetData[i];
-        if (!row || row.length < 4 || !row[3]) continue; // Eğitim adı (3.sütun) yoksa satırı atla
+        if (!row || row.length < 4 || !row[3]) continue; 
         
         const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
         batch.set(newRef, {
@@ -602,6 +619,12 @@ const EducationPage = ({ currentUser }) => {
       setIsSyncing(false);
     }
   };
+
+  useEffect(() => {
+    syncWithSheets();
+    const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
+    return () => clearInterval(interval);
+  }, [currentUser, data.length]); 
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -654,6 +677,9 @@ const EducationPage = ({ currentUser }) => {
       extraHeaderActions={syncButton}
       customRowClass={(row) => {
           if (row.deleteRequested) return 'bg-red-50 border-red-200';
+          if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-100 border-blue-200 text-blue-900';
+          if (row.durum === 'Eğitim Beklemede') return 'bg-orange-100 border-orange-200 text-orange-900';
+          if (row.durum === 'İptal') return 'bg-gray-200 border-gray-300 text-gray-700';
           if (row.durum === 'Yayında') return 'bg-green-50 border-green-200';
           return '';
       }}
@@ -838,7 +864,7 @@ const EditingPage = ({ currentUser }) => {
 };
 
 const InstructorPage = ({ currentUser }) => {
-    const [data, setData] = useState([]);
+    const [data, useState] = useState([]);
     
     const cols = [
         { key: 'egitmen', label: 'Eğitmen', sortable: true },
@@ -902,21 +928,27 @@ const InstructorPage = ({ currentUser }) => {
 };
 
 const CalendarPage = ({ currentUser }) => {
-  const isReadOnly = currentUser?.id === 'filming';
+  // Yönetici ve Çekim Sorumlusu (filming) hariç herkes için salt okunur (tıklanmaz, sadece görünür)
+  const canEditCalendar = currentUser?.id === 'manager' || currentUser?.id === 'education';
   
   return (
-    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
+    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col relative">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
-        {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
+        {!canEditCalendar && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">Sadece Görüntüleme</span>}
       </h2>
       
-      {/* Kaydırma serbestliği için iframe üzerindeki tüm tıklama ve saydamlık engelleri KESİN olarak kaldırıldı */}
       <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-hidden">
+        {/*
+          pointer-events: none => Çekim Takip (filming) iframe içindeki Google butonlarına veya takvim günlerine tıklayamaz, etkinlik ekleyemez/düzenleyemez.
+          Böylece sadece okuma (view-only) sağlanmış olur.
+          Aynı zamanda dıştaki wrapper kaydırmayı engellemez.
+        */}
         <iframe 
           src="https://meuzem.github.io/uzem_studyo/"
           className="w-full h-full border-0"
           title="Studio Calendar"
+          style={!canEditCalendar ? { pointerEvents: 'none' } : {}}
         />
       </div>
     </div>
@@ -1070,7 +1102,7 @@ export default function App() {
       `}>
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">E-<span className="text-indigo-400">UZEM</span></h1>
+            <h1 className="text-xl font-bold tracking-tight">Eİİ <span className="text-indigo-400">UZEM</span></h1>
             <p className="text-xs text-slate-400 mt-1">Panel</p>
           </div>
           <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400"><X size={20}/></button>
