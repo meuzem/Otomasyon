@@ -295,13 +295,13 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // ALTTA SABİTLENECEK DURUMLAR
+      // 1. PINNED BOTTOM GRUBU: Ne sıralanırsa sıralansın bu 4 durum harf sırasına göre en altta yer alır
       const getBottomOrder = (status) => {
         if (status === 'Eğitim Beklemede') return 1;
         if (status === 'Eğitmen Ayrıldı') return 2;
         if (status === 'İptal') return 3;
         if (status === 'Yayında') return 4;
-        return 0;
+        return 0; // Pinned değil
       };
 
       const aOrder = getBottomOrder(a.durum);
@@ -315,6 +315,7 @@ const DataTable = ({
       if (aOrder > 0) return 1;
       if (bOrder > 0) return -1;
 
+      // Çekim/Montaj sayfaları için "Bitti" iğnelemesi
       const isPinned = (row, key) => {
           if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
           if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
@@ -633,7 +634,7 @@ const EducationPage = ({ currentUser }) => {
              bolum: row[2]?.trim() || '',
              egitim: egitimAdi,
              egitmen: row[4]?.trim() || '',
-             icerikTakip: row[5]?.trim() || '',
+             icerikTakip: row[5]?.trim() || '', // 5. İndeks = İÇERİK TAKİP
              durum: row[6]?.trim() || 'Eğitim Planlanıyor',
              icerikBaslama: parseDate(row[7]?.trim()),
              cekimBaslama: parseDate(row[8]?.trim()),
@@ -994,8 +995,8 @@ const CalendarPage = ({ currentUser }) => {
       
       {/* SADECE BURADA 1 ADET DİKEY KAYDIRMA ÇUBUĞU ÇIKACAK ŞEKİLDE DÜZENLENDİ */}
       <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-y-auto custom-scrollbar">
-        {/* İframe kendi scroll barını göstermesin diye scrolling="no" eklendi, iç yapı 1400px yapılarak dış scroll tetiklendi */}
-        <div className="relative w-full" style={{ height: '1400px' }}>
+        {/* Yükseklik 2400px yapılarak takvimin en altına kadar inmesi sağlandı */}
+        <div className="relative w-full" style={{ height: '2400px' }}>
           
           {/* Tıklamayı ve düzenlemeyi engelleyen ama kaydırmayı engellemeyen saydam katman */}
           {isReadOnly && (
