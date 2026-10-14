@@ -15,7 +15,9 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  serverTimestamp 
+  serverTimestamp,
+  writeBatch,
+  getDocs
 } from 'firebase/firestore';
 import { 
   Chart as ChartJS, 
@@ -143,44 +145,36 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('tr-TR');
 };
 
-const parseCSV = (text) => {
-  const lines = text.split('\n');
+// Başlıklara değil sadece virgüllere bağlı Dizi ayrıştırıcı (Virgüllü hatalara karşı korumalı)
+const parseCSVToArray = (text) => {
   const result = [];
-  if (lines.length < 2) return result;
-  
-  const parseRow = (row) => {
-    const values = [];
-    let inQuotes = false;
-    let currentValue = '';
-    for (let i = 0; i < row.length; i++) {
-      const char = row[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        values.push(currentValue.trim());
-        currentValue = '';
-      } else {
-        currentValue += char;
-      }
+  let row = [];
+  let inQuotes = false;
+  let val = '';
+  for (let i = 0; i < text.length; i++) {
+    let char = text[i];
+    let nextChar = text[i + 1];
+    if (char === '"' && inQuotes && nextChar === '"') {
+      val += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      row.push(val.trim());
+      val = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') i++;
+      row.push(val.trim());
+      result.push(row);
+      row = [];
+      val = '';
+    } else {
+      val += char;
     }
-    values.push(currentValue.trim());
-    return values;
-  };
-
-  const headers = parseRow(lines[0]);
-  
-  for(let i = 1; i < lines.length; i++) {
-    if(!lines[i].trim()) continue;
-    const currentline = parseRow(lines[i]);
-    const obj = {};
-    headers.forEach((header, index) => {
-      let val = currentline[index] || '';
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.substring(1, val.length - 1);
-      }
-      obj[header] = val;
-    });
-    result.push(obj);
+  }
+  if (val !== '' || row.length > 0) {
+    row.push(val.trim());
+    result.push(row);
   }
   return result;
 };
@@ -278,11 +272,10 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // YAYINDA DURUMU HER ZAMAN EN ALTTA KALACAK (NE SIRALANIRSA SIRALANSIN)
+      // YAYINDA DURUMU EN ALTTA KALACAK KESİN KURAL
       if (a.durum === 'Yayında' && b.durum !== 'Yayında') return 1;
       if (a.durum !== 'Yayında' && b.durum === 'Yayında') return -1;
       
-      // Çekim veya Montaj sayfaları için Bitti iğnelemesi
       const isPinned = (row, key) => {
           if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
           if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
@@ -519,7 +512,7 @@ const EducationPage = ({ currentUser }) => {
   const [data, setData] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Google Sheets sütunlarına birebir uyarlanmış başlıklar
+  // Tablo başlıkları Google Sheets'in sütun sırası ile tamamen aynı
   const cols = [
     { key: 'dal', label: 'DAL ADI', type: 'select', options: LOOKUPS.DAL },
     { key: 'alan', label: 'ALAN ADI', type: 'select', options: LOOKUPS.ALAN, sortable: true },
@@ -551,6 +544,7 @@ const EducationPage = ({ currentUser }) => {
     return () => unsub();
   }, [currentUser]);
 
+  // Tüm Veritabanını Google Sheets ile Sıfırlayarak Yeniden Senkronize Et
   const syncWithSheets = async () => {
     if (isSyncing || currentUser?.id === 'admin') return;
     setIsSyncing(true);
@@ -559,70 +553,55 @@ const EducationPage = ({ currentUser }) => {
       const sheetUrl = "https://docs.google.com/spreadsheets/d/1OEFazqULDNoEF0p-we8uj1taVLhcQtPP/gviz/tq?tqx=out:csv&gid=1682860427";
       const response = await fetch(sheetUrl);
       const text = await response.text();
-      const sheetData = parseCSV(text);
       
-      const normalizeHeader = (h) => h.toLowerCase().replace(/[\s,]/g, '');
-      const getValue = (row, possibleNames) => {
-          const key = Object.keys(row).find(k => possibleNames.includes(normalizeHeader(k)));
-          return key ? row[key] : '';
-      };
-
-      const sheetEgitimler = [];
-
-      // Güncelleme veya Ekleme İşlemi
-      for (const row of sheetData) {
-        const egitimAdi = getValue(row, ['eğitim', 'egitim']);
-        if (!egitimAdi) continue; 
-        
-        sheetEgitimler.push(egitimAdi.toLowerCase().trim());
-
-        const recordData = {
-           dal: getValue(row, ['daladı', 'daladi', 'dal']),
-           alan: getValue(row, ['alanadı', 'alanadi', 'alan']),
-           bolum: getValue(row, ['bölüm', 'bolum']),
-           egitim: egitimAdi,
-           egitmen: getValue(row, ['eğitmen', 'egitmen']),
-           icerikTakip: getValue(row, ['içeriktakip', 'iceriktakip', 'içeriktaki,p', 'i̇çeri̇ktaki̇,p']),
-           durum: getValue(row, ['durum']) || 'Eğitim Planlanıyor',
-           icerikBaslama: getValue(row, ['içerikbaşlamatarihi', 'icerikbaslamatarihi']),
-           cekimBaslama: getValue(row, ['çekimbaşlamatarihi', 'cekimbaslamatarihi']),
-           montajBaslama: getValue(row, ['montajbaşlamatarihi', 'montajbaslamatarihi']),
-           montajSorumlusu: getValue(row, ['montajsorumlusu']),
-           yayinTarihi: getValue(row, ['yayıntarihi', 'yayintarihi']),
-           notlar: getValue(row, ['notlar']),
-           updatedAt: serverTimestamp(),
-           kaynak: 'GoogleSheets'
-        };
-
-        const existingRecord = data.find(item => item.egitim?.toLowerCase().trim() === egitimAdi.toLowerCase().trim());
-        
-        if (existingRecord) {
-           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', existingRecord.id), recordData);
-        } else {
-           recordData.createdAt = serverTimestamp();
-           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), recordData);
-        }
+      const sheetData = parseCSVToArray(text);
+      if (sheetData.length <= 1) {
+          setIsSyncing(false);
+          return;
       }
 
-      // Tablodan Silinmiş Olanları Uygulamadan da Sil (Tam Aynalama)
-      for (const item of data) {
-          if (!sheetEgitimler.includes(item.egitim?.toLowerCase().trim())) {
-              await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'education_tracking', item.id));
-          }
+      const batch = writeBatch(db);
+
+      // MEVCUT TÜM VERİLERİ SİL (TAM SIFIRLAMA)
+      const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
+      snapshot.docs.forEach((docSnap) => {
+          batch.delete(docSnap.ref);
+      });
+
+      // E-TABLODAKİ TÜM VERİLERİ BİREBİR EKLE
+      // İndeks sırasıyla çekerek "İÇERİK TAKİ,P" gibi header hatalarının önüne geçilir
+      for (let i = 1; i < sheetData.length; i++) {
+        const row = sheetData[i];
+        if (!row || row.length < 4 || !row[3]) continue; // Eğitim adı (3.sütun) yoksa satırı atla
+        
+        const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
+        batch.set(newRef, {
+             dal: row[0] || '',
+             alan: row[1] || '',
+             bolum: row[2] || '',
+             egitim: row[3] || '',
+             egitmen: row[4] || '',
+             icerikTakip: row[5] || '',
+             durum: row[6] || 'Eğitim Planlanıyor',
+             icerikBaslama: row[7] || '',
+             cekimBaslama: row[8] || '',
+             montajBaslama: row[9] || '',
+             montajSorumlusu: row[10] || '',
+             yayinTarihi: row[11] || '',
+             notlar: row[12] || '',
+             createdAt: serverTimestamp(),
+             kaynak: 'GoogleSheets'
+        });
       }
 
+      await batch.commit();
+      
     } catch (error) {
       console.error("Sheet otomatik veri çekme hatası:", error);
     } finally {
       setIsSyncing(false);
     }
   };
-
-  useEffect(() => {
-    syncWithSheets();
-    const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
-    return () => clearInterval(interval);
-  }, [currentUser, data.length]); 
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -654,10 +633,10 @@ const EducationPage = ({ currentUser }) => {
       onClick={syncWithSheets} 
       disabled={isSyncing}
       className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
-      title="Google Sheets'ten verileri zorla güncelle"
+      title="Google Sheets'ten verileri zorla güncelle (Eskiler Silinir, Yeniler Eklenir)"
     >
         <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-        {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek'}
+        {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek ve Sıfırla'}
     </button>
   ) : null;
 
@@ -926,23 +905,19 @@ const CalendarPage = ({ currentUser }) => {
   const isReadOnly = currentUser?.id === 'filming';
   
   return (
-    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col relative">
+    <div className="w-full h-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col">
       <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
         <Calendar className="text-indigo-600"/> Stüdyo Çekim Takvimi
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* Scroll bar sağlayan dış kapsayıcı div */}
-      <div className="flex-1 bg-gray-100 rounded-lg overflow-auto border border-gray-300 relative custom-scrollbar">
-        {/* İframe'i gerçek boyutundan büyük yaparak iç scroll'u iptal eden ve dış kapsayıcıda kaydırmayı sağlayan iç div */}
-        <div style={{ minWidth: '1000px', height: '1500px', position: 'relative' }}>
-          <iframe 
-            src="https://meuzem.github.io/uzem_studyo/"
-            className="w-full h-full border-0"
-            title="Studio Calendar"
-            style={isReadOnly ? { pointerEvents: 'none' } : {}}
-          />
-        </div>
+      {/* Kaydırma serbestliği için iframe üzerindeki tüm tıklama ve saydamlık engelleri KESİN olarak kaldırıldı */}
+      <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-hidden">
+        <iframe 
+          src="https://meuzem.github.io/uzem_studyo/"
+          className="w-full h-full border-0"
+          title="Studio Calendar"
+        />
       </div>
     </div>
   );
