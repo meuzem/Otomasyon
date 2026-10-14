@@ -576,15 +576,15 @@ const EducationPage = ({ currentUser }) => {
       
       // Güvenlik: Eğer yetki hatası yüzünden HTML (login vb.) dönerse veri silmeyi engelle.
       if (text.toLowerCase().includes('<!doctype html>') || text.toLowerCase().includes('<html')) {
-         console.error("Geçersiz veri veya erişim engellendi (HTML döndü).");
-         setIsSyncing(false);
-         return;
+          console.error("Geçersiz veri veya erişim engellendi (HTML döndü).");
+          setIsSyncing(false);
+          return;
       }
 
       const sheetData = parseCSV(text);
       if (sheetData.length < 2) {
-         setIsSyncing(false);
-         return;
+          setIsSyncing(false);
+          return;
       }
 
       const batch = writeBatch(db);
@@ -592,7 +592,7 @@ const EducationPage = ({ currentUser }) => {
       
       const existingDocs = {};
       snapshot.docs.forEach(doc => {
-         existingDocs[doc.data().egitim?.toLowerCase().trim()] = doc;
+          existingDocs[doc.data().egitim?.toLowerCase().trim()] = doc;
       });
 
       const currentSheetEgitimler = new Set();
@@ -628,27 +628,27 @@ const EducationPage = ({ currentUser }) => {
 
         const existingDoc = existingDocs[egitimAdi.toLowerCase()];
         if (existingDoc) {
-          batch.update(existingDoc.ref, recordData);
+           batch.update(existingDoc.ref, recordData);
         } else {
-          recordData.createdAt = serverTimestamp();
-          const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
-          batch.set(newRef, recordData);
+           recordData.createdAt = serverTimestamp();
+           const newRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'));
+           batch.set(newRef, recordData);
         }
       }
 
       // Güvenlik kilidi: Eğer Sheets tablosundan başarılı bir şekilde en az 10 kayıt çekilebildiyse 
       // tabloda OLMAYAN eski veritabanı kayıtlarını silerek tam senkronizasyon (sıfırlama) sağla.
       if (validRowCount > 10) {
-         snapshot.docs.forEach(doc => {
-             const egitim = doc.data().egitim?.toLowerCase().trim();
-             if (egitim && !currentSheetEgitimler.has(egitim)) {
-                 batch.delete(doc.ref);
-             }
-         });
-         await batch.commit();
+          snapshot.docs.forEach(doc => {
+              const egitim = doc.data().egitim?.toLowerCase().trim();
+              if (egitim && !currentSheetEgitimler.has(egitim)) {
+                  batch.delete(doc.ref);
+              }
+          });
+          await batch.commit();
       } else if (validRowCount > 0) {
-         // Eğer 10'dan az veri varsa sadece güncelleme/ekleme yap, tüm sistemi çökertecek silmeyi engelle.
-         await batch.commit();
+          // Eğer 10'dan az veri varsa sadece güncelleme/ekleme yap, tüm sistemi çökertecek silmeyi engelle.
+          await batch.commit();
       }
 
     } catch (error) {
@@ -662,7 +662,7 @@ const EducationPage = ({ currentUser }) => {
     syncWithSheets();
     const interval = setInterval(syncWithSheets, 5 * 60 * 1000); 
     return () => clearInterval(interval);
-  }, [currentUser]); 
+  }, [currentUser]); // data.length bağımlılığı çıkarılarak gereksiz wipe döngüsü engellendi.
 
   const handleAdd = async (form) => {
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'education_tracking'), { ...form, createdAt: serverTimestamp() });
@@ -691,10 +691,10 @@ const EducationPage = ({ currentUser }) => {
 
   const syncButton = currentUser?.canEdit ? (
     <button 
-     onClick={syncWithSheets} 
-     disabled={isSyncing}
-     className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
-     title="Google Sheets'ten verileri zorla güncelle (Eskiler Silinir, Yeniler Eklenir)"
+      onClick={syncWithSheets} 
+      disabled={isSyncing}
+      className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
+      title="Google Sheets'ten verileri zorla güncelle (Eskiler Silinir, Yeniler Eklenir)"
     >
         <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
         {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek ve Sıfırla'}
@@ -703,25 +703,25 @@ const EducationPage = ({ currentUser }) => {
 
   return (
     <DataTable
-     title="Eğitim Takip Listesi"
+      title="Eğitim Takip Listesi"
       columns={cols}
       data={data}
-     onAdd={handleAdd}
-     onUpdate={handleUpdate}
-     onDelete={handleDelete}
-     onRequestDelete={handleRequestDelete}
-     onApproveDelete={handleApproveDelete}
-     onRejectDelete={handleRejectDelete}
-     extraHeaderActions={syncButton}
-     customRowClass={(row) => {
-         if (row.deleteRequested) return 'bg-red-50 border-red-200';
-         if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-50 border-blue-200 text-blue-900';
-         if (row.durum === 'Eğitim Beklemede') return 'bg-orange-50 border-orange-200 text-orange-900';
-         if (row.durum === 'İptal') return 'bg-gray-100 border-gray-300 text-gray-700';
-         if (row.durum === 'Yayında') return 'bg-green-50 border-green-200 text-green-900';
-         return '';
-     }}
-     currentUser={currentUser}
+      onAdd={handleAdd}
+      onUpdate={handleUpdate}
+      onDelete={handleDelete}
+      onRequestDelete={handleRequestDelete}
+      onApproveDelete={handleApproveDelete}
+      onRejectDelete={handleRejectDelete}
+      extraHeaderActions={syncButton}
+      customRowClass={(row) => {
+          if (row.deleteRequested) return 'bg-red-50 border-red-200';
+          if (row.durum === 'Eğitmen Ayrıldı') return 'bg-blue-50 border-blue-200 text-blue-900';
+          if (row.durum === 'Eğitim Beklemede') return 'bg-orange-50 border-orange-200 text-orange-900';
+          if (row.durum === 'İptal') return 'bg-gray-100 border-gray-300 text-gray-700';
+          if (row.durum === 'Yayında') return 'bg-green-50 border-green-200 text-green-900';
+          return '';
+      }}
+      currentUser={currentUser}
     />
   );
 };
@@ -977,16 +977,19 @@ const CalendarPage = ({ currentUser }) => {
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* overflow-auto eklenerek dış div'in kaydırılabilir olması sağlandı */}
+      {/* Scroll edilebilir dış kutu. İframe içinde kaydırma yapılmasını taklit etmek için 
+          içeriği suni olarak uzatır, böylece tekerlek hareketleri dış kutuyu kaydırır. */}
       <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-auto custom-scrollbar">
-        {/* İçerik boyutlandırılarak farenin dış div'i kaydırması sağlandı (1200x1200 piksel) */}
-        <div style={{ minWidth: '100%', minHeight: '100%', width: '1200px', height: '1200px', position: 'relative' }}>
+        {/* İframe ve koruyucu katmanın yerleştiği çok uzun iç kutu */}
+        <div style={{ width: '100%', minWidth: '1000px', height: '1500px', position: 'relative' }}>
           
+          {/* Tıklamaları YAKALAYAN Kalkan - Scroll'u engellemez çünkü parent'ta overflow var */}
           {isReadOnly && (
-            <div 
-              className="absolute inset-0 z-10 cursor-default" 
-              title="Sadece görüntüleme yetkiniz bulunmaktadır."
-            ></div>
+             <div 
+               className="absolute inset-0 z-10 cursor-not-allowed" 
+               style={{ backgroundColor: 'transparent' }}
+               title="Sadece görüntüleme yetkiniz bulunmaktadır."
+             ></div>
           )}
           
           <iframe 
