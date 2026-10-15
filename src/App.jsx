@@ -753,7 +753,7 @@ const EducationPage = ({ currentUser }) => {
       title="Google Sheets'ten verileri zorla güncelle"
     >
         <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-        {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek ve Sıfırla'}
+        {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek'}
     </button>
   ) : null;
 
@@ -1069,11 +1069,15 @@ const DashboardPage = ({ currentUser }) => {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
+  // HARİÇ TUTULACAK DURUMLAR - Hiçbir raporda veya grafikte sayılmayacak.
+  const EXCLUDED_STATUSES = ['Eğitim Beklemede', 'Eğitmen Ayrıldı', 'İptal'];
+  const activeEduData = useMemo(() => eduData.filter(d => !EXCLUDED_STATUSES.includes(d.durum)), [eduData]);
+
   // --- 1. TAB: GENEL ÖZET VERİLERİ ---
   const inFilmingStatuses = ['Çekimde', 'Çekim Revize', 'Ekran Çekiminde'];
-  const inFilming = eduData.filter(d => inFilmingStatuses.includes(d.durum)).length;
+  const inFilming = activeEduData.filter(d => inFilmingStatuses.includes(d.durum)).length;
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
-  const published = eduData.filter(d => d.durum === 'Yayında').length;
+  const published = activeEduData.filter(d => d.durum === 'Yayında').length;
   
   const PREPARING_STATUSES = [
     'Eğitim Planlanıyor', 'Eğitmen İçerik Hazırlıyor', 'Ekran Çekiminde',
@@ -1082,9 +1086,9 @@ const DashboardPage = ({ currentUser }) => {
     'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'ID Bekliyor',
     'İYS Aşamasında', 'ÖYS Aşamasında', 'Animasyon Programı Bekliyor'
   ];
-  const hazirlanan = eduData.filter(d => PREPARING_STATUSES.includes(d.durum)).length;
+  const hazirlanan = activeEduData.filter(d => PREPARING_STATUSES.includes(d.durum)).length;
   
-  const eduStatusCounts = eduData.reduce((acc, curr) => {
+  const eduStatusCounts = activeEduData.reduce((acc, curr) => {
     const s = curr.durum || 'Belirsiz';
     acc[s] = (acc[s] || 0) + 1;
     return acc;
@@ -1109,21 +1113,21 @@ const DashboardPage = ({ currentUser }) => {
   };
 
   // --- 2. TAB: DETAYLI RAPORLAR VERİLERİ ---
-  const cekimBekleyenler = useMemo(() => eduData.filter(d => d.durum === 'Çekim Bekliyor'), [eduData]);
-  const montajBekleyenler = useMemo(() => eduData.filter(d => d.durum === 'Montaj Sırasında'), [eduData]);
+  const cekimBekleyenler = useMemo(() => activeEduData.filter(d => d.durum === 'Çekim Bekliyor'), [activeEduData]);
+  const montajBekleyenler = useMemo(() => activeEduData.filter(d => d.durum === 'Montaj Sırasında'), [activeEduData]);
   
   const egitmenCounts = useMemo(() => {
       const counts = {};
-      eduData.forEach(d => {
+      activeEduData.forEach(d => {
           const egitmen = d.egitmen?.trim();
           if (egitmen) counts[egitmen] = (counts[egitmen] || 0) + 1;
       });
       return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [eduData]);
+  }, [activeEduData]);
 
   const alanStats = useMemo(() => {
       const stats = {};
-      eduData.forEach(d => {
+      activeEduData.forEach(d => {
           const alan = d.alan?.trim();
           if (!alan) return;
           if (!stats[alan]) stats[alan] = { yayinda: 0, hazirlanan: 0 };
@@ -1131,11 +1135,11 @@ const DashboardPage = ({ currentUser }) => {
           else if (PREPARING_STATUSES.includes(d.durum)) stats[alan].hazirlanan++;
       });
       return stats;
-  }, [eduData]);
+  }, [activeEduData]);
 
   const dalStats = useMemo(() => {
       const stats = {};
-      eduData.forEach(d => {
+      activeEduData.forEach(d => {
           const dal = d.dal?.trim();
           if (!dal) return;
           if (!stats[dal]) stats[dal] = { yayinda: 0, hazirlanan: 0 };
@@ -1143,7 +1147,7 @@ const DashboardPage = ({ currentUser }) => {
           else if (PREPARING_STATUSES.includes(d.durum)) stats[dal].hazirlanan++;
       });
       return stats;
-  }, [eduData]);
+  }, [activeEduData]);
 
   const alanChartData = {
       labels: Object.keys(alanStats),
@@ -1161,23 +1165,82 @@ const DashboardPage = ({ currentUser }) => {
       ]
   };
 
+  // HTML formatında çoklu tablo içeren Excel Çıktısı Fonksiyonu
+  const exportDashboardToExcel = (type) => {
+    let htmlContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body>`;
+    
+    if (type === 'genel') {
+        htmlContent += `<h2>Genel Ozet</h2><table border="1"><tr><th>Cekimdeki Egitim</th><th>Montajdaki Egitim</th><th>Yayindaki Egitim</th><th>Hazirlanan Egitim</th></tr><tr><td>${inFilming}</td><td>${inEditing}</td><td>${published}</td><td>${hazirlanan}</td></tr></table><br/>`;
+        
+        htmlContent += `<h2>Durum Dagilimi</h2><table border="1"><tr><th>Durum</th><th>Sayi</th></tr>`;
+        Object.entries(eduStatusCounts).forEach(([k,v]) => {
+            htmlContent += `<tr><td>${k}</td><td>${v}</td></tr>`;
+        });
+        htmlContent += `</table>`;
+    } else {
+        htmlContent += `<h2>Bekleyen Egitimler Listesi</h2><table border="1"><tr><th>Egitim Adi</th><th>Egitmen</th><th>Asama</th></tr>`;
+        [...cekimBekleyenler, ...montajBekleyenler].forEach(item => {
+            htmlContent += `<tr><td>${item.egitim}</td><td>${item.egitmen || '-'}</td><td>${item.durum}</td></tr>`;
+        });
+        htmlContent += `</table><br/>`;
+
+        htmlContent += `<h2>Egitmen Performans Raporu</h2><table border="1"><tr><th>Egitmen Adi</th><th>Egitim Sayisi</th></tr>`;
+        egitmenCounts.forEach(([isim, count]) => {
+            htmlContent += `<tr><td>${isim}</td><td>${count}</td></tr>`;
+        });
+        htmlContent += `</table><br/>`;
+
+        htmlContent += `<h2>Alanlara Gore Egitim Dagilimi</h2><table border="1"><tr><th>Alan Adi</th><th>Yayinda</th><th>Hazirlanan</th></tr>`;
+        Object.entries(alanStats).forEach(([alan, stats]) => {
+            htmlContent += `<tr><td>${alan}</td><td>${stats.yayinda}</td><td>${stats.hazirlanan}</td></tr>`;
+        });
+        htmlContent += `</table><br/>`;
+
+        htmlContent += `<h2>Dallara Gore Egitim Dagilimi</h2><table border="1"><tr><th>Dal Adi</th><th>Yayinda</th><th>Hazirlanan</th></tr>`;
+        Object.entries(dalStats).forEach(([dal, stats]) => {
+            htmlContent += `<tr><td>${dal}</td><td>${stats.yayinda}</td><td>${stats.hazirlanan}</td></tr>`;
+        });
+        htmlContent += `</table>`;
+    }
+    
+    htmlContent += `</body></html>`;
+    
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Dashboard_${type}_Raporu_${new Date().toISOString().slice(0,10)}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-transparent overflow-hidden">
       
-      {/* Üst Sekmeler */}
-      <div className="flex gap-6 mb-4 px-2 border-b border-gray-300 shrink-0">
-         <button 
-            onClick={() => setDashTab('genel')} 
-            className={`pb-2 text-sm font-bold transition-colors ${dashTab === 'genel' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
-         >
-            Genel Özet
-         </button>
-         <button 
-            onClick={() => setDashTab('raporlar')} 
-            className={`pb-2 text-sm font-bold transition-colors ${dashTab === 'raporlar' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
-         >
-            Detaylı Raporlar
-         </button>
+      {/* Üst Sekmeler ve Excel İndir Butonu */}
+      <div className="flex justify-between items-center mb-4 px-2 border-b border-gray-300 shrink-0">
+        <div className="flex gap-6">
+           <button 
+              onClick={() => setDashTab('genel')} 
+              className={`pb-2 text-sm font-bold transition-colors ${dashTab === 'genel' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+           >
+              Genel Özet
+           </button>
+           <button 
+              onClick={() => setDashTab('raporlar')} 
+              className={`pb-2 text-sm font-bold transition-colors ${dashTab === 'raporlar' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+           >
+              Detaylı Raporlar
+           </button>
+        </div>
+        <button 
+           onClick={() => exportDashboardToExcel(dashTab)} 
+           className="flex items-center gap-1.5 px-3 py-1.5 mb-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+           title="Görüntülenen sekmeye ait rapor tablolarını Excel olarak indirir"
+        >
+           <Download size={16} /> Excel İndir
+        </button>
       </div>
 
       {/* Yana Kaydırmalı Kapsayıcı */}
@@ -1325,10 +1388,7 @@ const DashboardPage = ({ currentUser }) => {
                   </div>
                 </div>
 
-                {/* 
-                   ÖZEL KURAL UYGULAMASI: 
-                   "Her alanı ayrı bir başlık altında raporlamak zorundadır" kuralını yerine getiren Alan Raporlama Izgarası 
-                */}
+                {/* ALAN Raporlama Izgarası (Zorunlu Kural Uygulaması) */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                     <h3 className="text-sm font-bold text-gray-700 mb-4">Alan Bazlı Detaylı Dağılım Raporu</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
