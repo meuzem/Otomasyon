@@ -48,7 +48,9 @@ import {
   Users, 
   ArrowUpDown,
   Check,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  UserCheck
 } from 'lucide-react';
 
 // --- ChartJS Registration ---
@@ -159,7 +161,6 @@ const parseDate = (dateStr) => {
     return dateStr; 
 };
 
-// Sütun sıralarına dayalı, en güvenli CSV ayrıştırıcı
 const parseCSV = (str) => {
     const arr = [];
     let quote = false;
@@ -179,7 +180,6 @@ const parseCSV = (str) => {
     return arr;
 };
 
-// Uzun notlar için genişleyen metin bileşeni
 const TruncatedText = ({ text, maxLength = 40 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const strText = String(text || '');
@@ -295,13 +295,12 @@ const DataTable = ({
     }
 
     processedData.sort((a, b) => {
-      // 1. PINNED BOTTOM GRUBU: Ne sıralanırsa sıralansın bu 4 durum harf sırasına göre en altta yer alır
       const getBottomOrder = (status) => {
         if (status === 'Eğitim Beklemede') return 1;
         if (status === 'Eğitmen Ayrıldı') return 2;
         if (status === 'İptal') return 3;
         if (status === 'Yayında') return 4;
-        return 0; // Pinned değil
+        return 0; 
       };
 
       const aOrder = getBottomOrder(a.durum);
@@ -315,7 +314,6 @@ const DataTable = ({
       if (aOrder > 0) return 1;
       if (bOrder > 0) return -1;
 
-      // Çekim/Montaj sayfaları için "Bitti" iğnelemesi
       const isPinned = (row, key) => {
           if (key === 'cekimDurumu' && row.cekimDurumu === 'Bitti') return true;
           if ((key === 'montajDurumu' || key === 'montajSorumlusu') && row.montajDurumu === 'Bitti') return true;
@@ -401,7 +399,6 @@ const DataTable = ({
             </div>
         );
     } else if (col.type === 'dynamicHours') {
-        // Dinamik Saat Seçimi Yapısı (Seçilen Gün Sayısına Göre Üretilir)
         const days = form[col.dependsOn] ? form[col.dependsOn].split(', ').filter(Boolean) : [];
         if (days.length === 0) return <span className="text-gray-400 text-xs">Önce gün seçiniz</span>;
         
@@ -498,7 +495,6 @@ const DataTable = ({
                   key={col.key} 
                   className="p-0 border-b font-semibold bg-gray-100 align-middle relative group"
                 >
-                  {/* Sütun genişletme/daraltma özelliği resize: horizontal ile verildi */}
                   <div 
                      style={{ resize: 'horizontal', overflow: 'hidden', minWidth: '120px', maxWidth: '400px' }}
                      className={`p-3 flex items-center gap-1 h-full ${col.sortable ? 'cursor-pointer hover:bg-gray-200 transition-colors' : ''}`}
@@ -540,7 +536,6 @@ const DataTable = ({
                   {columns.map(col => (
                     <td key={col.key} className="p-3 align-top">
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (
-                          // Notlar için daraltma/genişletme, Dinamik Saatler için özel görünüm
                           col.key === 'notlar' 
                             ? <TruncatedText text={row[col.key]} maxLength={40} />
                             : col.type === 'dynamicHours'
@@ -755,7 +750,7 @@ const EducationPage = ({ currentUser }) => {
       onClick={syncWithSheets} 
       disabled={isSyncing}
       className={`flex items-center gap-1.5 px-3 py-1.5 ${isSyncing ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white text-sm font-medium rounded-md transition-colors`}
-      title="Google Sheets'ten verileri zorla güncelle (Eskiler Silinir, Yeniler Eklenir)"
+      title="Google Sheets'ten verileri zorla güncelle"
     >
         <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
         {isSyncing ? 'Eşitleniyor...' : 'E-Tablodan Çek ve Sıfırla'}
@@ -1037,12 +1032,9 @@ const CalendarPage = ({ currentUser }) => {
         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full ml-2">İzleme Modu</span>}
       </h2>
       
-      {/* SADECE BURADA 1 ADET DİKEY KAYDIRMA ÇUBUĞU ÇIKACAK ŞEKİLDE DÜZENLENDİ */}
       <div className="flex-1 bg-gray-100 rounded-lg border border-gray-300 relative overflow-y-auto custom-scrollbar">
-        {/* Yükseklik 2400px yapılarak takvimin en altına kadar inmesi sağlandı */}
         <div className="relative w-full" style={{ height: '2400px' }}>
           
-          {/* Tıklamayı ve düzenlemeyi engelleyen ama kaydırmayı engellemeyen saydam katman */}
           {isReadOnly && (
              <div 
                className="absolute inset-0 z-10 cursor-not-allowed" 
@@ -1064,6 +1056,7 @@ const CalendarPage = ({ currentUser }) => {
 };
 
 const DashboardPage = ({ currentUser }) => {
+  const [dashTab, setDashTab] = useState('genel');
   const [eduData, setEduData] = useState([]);
   const [filmData, setFilmData] = useState([]);
   const [editData, setEditData] = useState([]);
@@ -1076,10 +1069,9 @@ const DashboardPage = ({ currentUser }) => {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
-  // ÇEKİMDEKİ EĞİTİM SAYISI HESAPLAMASI (Çekimde, Çekim Revize, Ekran Çekiminde)
+  // --- 1. TAB: GENEL ÖZET VERİLERİ ---
   const inFilmingStatuses = ['Çekimde', 'Çekim Revize', 'Ekran Çekiminde'];
   const inFilming = eduData.filter(d => inFilmingStatuses.includes(d.durum)).length;
-  
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   const published = eduData.filter(d => d.durum === 'Yayında').length;
   
@@ -1116,40 +1108,246 @@ const DashboardPage = ({ currentUser }) => {
     }]
   };
 
+  // --- 2. TAB: DETAYLI RAPORLAR VERİLERİ ---
+  const cekimBekleyenler = useMemo(() => eduData.filter(d => d.durum === 'Çekim Bekliyor'), [eduData]);
+  const montajBekleyenler = useMemo(() => eduData.filter(d => d.durum === 'Montaj Sırasında'), [eduData]);
+  
+  const egitmenCounts = useMemo(() => {
+      const counts = {};
+      eduData.forEach(d => {
+          const egitmen = d.egitmen?.trim();
+          if (egitmen) counts[egitmen] = (counts[egitmen] || 0) + 1;
+      });
+      return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [eduData]);
+
+  const alanStats = useMemo(() => {
+      const stats = {};
+      eduData.forEach(d => {
+          const alan = d.alan?.trim();
+          if (!alan) return;
+          if (!stats[alan]) stats[alan] = { yayinda: 0, hazirlanan: 0 };
+          if (d.durum === 'Yayında') stats[alan].yayinda++;
+          else if (PREPARING_STATUSES.includes(d.durum)) stats[alan].hazirlanan++;
+      });
+      return stats;
+  }, [eduData]);
+
+  const dalStats = useMemo(() => {
+      const stats = {};
+      eduData.forEach(d => {
+          const dal = d.dal?.trim();
+          if (!dal) return;
+          if (!stats[dal]) stats[dal] = { yayinda: 0, hazirlanan: 0 };
+          if (d.durum === 'Yayında') stats[dal].yayinda++;
+          else if (PREPARING_STATUSES.includes(d.durum)) stats[dal].hazirlanan++;
+      });
+      return stats;
+  }, [eduData]);
+
+  const alanChartData = {
+      labels: Object.keys(alanStats),
+      datasets: [
+          { label: 'Yayında', data: Object.values(alanStats).map(s => s.yayinda), backgroundColor: '#22c55e' },
+          { label: 'Hazırlanan', data: Object.values(alanStats).map(s => s.hazirlanan), backgroundColor: '#f97316' }
+      ]
+  };
+
+  const dalChartData = {
+      labels: Object.keys(dalStats),
+      datasets: [
+          { label: 'Yayında', data: Object.values(dalStats).map(s => s.yayinda), backgroundColor: '#22c55e' },
+          { label: 'Hazırlanan', data: Object.values(dalStats).map(s => s.hazirlanan), backgroundColor: '#f97316' }
+      ]
+  };
+
   return (
-    <div className="p-2 space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="text-gray-500 text-xs font-bold uppercase">Çekimdeki Eğitim</div>
-          <div className="text-3xl font-bold text-orange-600 mt-1">{inFilming}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="text-gray-500 text-xs font-bold uppercase">Montajdaki Eğitim</div>
-          <div className="text-3xl font-bold text-purple-600 mt-1">{inEditing}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="text-gray-500 text-xs font-bold uppercase">Yayındaki Eğitim</div>
-          <div className="text-3xl font-bold text-green-600 mt-1">{published}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="text-gray-500 text-xs font-bold uppercase">Hazırlanan Eğitim</div>
-          <div className="text-3xl font-bold text-slate-600 mt-1">{hazirlanan}</div>
-        </div>
+    <div className="flex flex-col h-full w-full bg-transparent overflow-hidden">
+      
+      {/* Üst Sekmeler */}
+      <div className="flex gap-6 mb-4 px-2 border-b border-gray-300 shrink-0">
+         <button 
+            onClick={() => setDashTab('genel')} 
+            className={`pb-2 text-sm font-bold transition-colors ${dashTab === 'genel' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+         >
+            Genel Özet
+         </button>
+         <button 
+            onClick={() => setDashTab('raporlar')} 
+            className={`pb-2 text-sm font-bold transition-colors ${dashTab === 'raporlar' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+         >
+            Detaylı Raporlar
+         </button>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[400px] flex flex-col">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Eğitim Durum Dağılımı</h3>
-          <div className="flex-1 relative w-full">
-            <Pie data={pieData} options={{ maintainAspectRatio: false, responsive: true }} />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[400px] flex flex-col">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Genel İstatistikler</h3>
-          <div className="flex-1 relative w-full">
-            <Bar data={barData} options={{ maintainAspectRatio: false, responsive: true }} />
-          </div>
-        </div>
+
+      {/* Yana Kaydırmalı Kapsayıcı */}
+      <div className="flex-1 relative w-full overflow-hidden">
+         <div 
+            className="absolute top-0 left-0 h-full flex transition-transform duration-500 ease-in-out w-[200%]"
+            style={{ transform: dashTab === 'genel' ? 'translateX(0)' : 'translateX(-50%)' }}
+         >
+            
+            {/* 1. SEKM: GENEL ÖZET */}
+            <div className="w-1/2 h-full overflow-y-auto custom-scrollbar px-2 pb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div className="text-gray-500 text-xs font-bold uppercase">Çekimdeki Eğitim</div>
+                    <div className="text-3xl font-bold text-orange-600 mt-1">{inFilming}</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div className="text-gray-500 text-xs font-bold uppercase">Montajdaki Eğitim</div>
+                    <div className="text-3xl font-bold text-purple-600 mt-1">{inEditing}</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div className="text-gray-500 text-xs font-bold uppercase">Yayındaki Eğitim</div>
+                    <div className="text-3xl font-bold text-green-600 mt-1">{published}</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div className="text-gray-500 text-xs font-bold uppercase">Hazırlanan Eğitim</div>
+                    <div className="text-3xl font-bold text-slate-600 mt-1">{hazirlanan}</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[400px] flex flex-col">
+                    <h3 className="text-sm font-bold text-gray-700 mb-4">Eğitim Durum Dağılımı</h3>
+                    <div className="flex-1 relative w-full">
+                      <Pie data={pieData} options={{ maintainAspectRatio: false, responsive: true }} />
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[400px] flex flex-col">
+                    <h3 className="text-sm font-bold text-gray-700 mb-4">Genel İstatistikler</h3>
+                    <div className="flex-1 relative w-full">
+                      <Bar data={barData} options={{ maintainAspectRatio: false, responsive: true }} />
+                    </div>
+                  </div>
+                </div>
+            </div>
+
+            {/* 2. SEKM: DETAYLI RAPORLAR */}
+            <div className="w-1/2 h-full overflow-y-auto custom-scrollbar px-2 pb-6 space-y-6">
+                
+                {/* Bekleyen İşler Kartları */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-red-50 to-white p-4 rounded-xl shadow-sm border border-red-100 flex items-center justify-between">
+                    <div>
+                        <div className="text-red-800 text-xs font-bold uppercase">Çekim Bekleyen Eğitim</div>
+                        <div className="text-3xl font-bold text-red-600 mt-1">{cekimBekleyenler.length}</div>
+                    </div>
+                    <Clock size={32} className="text-red-200" />
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-xl shadow-sm border border-blue-100 flex items-center justify-between">
+                    <div>
+                        <div className="text-blue-800 text-xs font-bold uppercase">Montaj Bekleyen Eğitim</div>
+                        <div className="text-3xl font-bold text-blue-600 mt-1">{montajBekleyenler.length}</div>
+                    </div>
+                    <Clock size={32} className="text-blue-200" />
+                  </div>
+                </div>
+
+                {/* Listeler (İki Kolon) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Bekleyen Eğitimler Listesi */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-[350px]">
+                        <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+                            <h3 className="text-sm font-bold text-gray-800">Bekleyen Eğitimler Listesi</h3>
+                        </div>
+                        <div className="flex-1 overflow-auto p-2">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr className="border-b text-gray-500">
+                                        <th className="py-2 px-1 font-semibold">Eğitim Adı</th>
+                                        <th className="py-2 px-1 font-semibold">Eğitmen</th>
+                                        <th className="py-2 px-1 font-semibold">Aşama</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {[...cekimBekleyenler, ...montajBekleyenler].map(item => (
+                                        <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50">
+                                            <td className="py-2 px-1 truncate max-w-[150px]" title={item.egitim}>{item.egitim}</td>
+                                            <td className="py-2 px-1 text-gray-600">{item.egitmen || '-'}</td>
+                                            <td className="py-2 px-1">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.durum === 'Çekim Bekliyor' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                    {item.durum}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {cekimBekleyenler.length === 0 && montajBekleyenler.length === 0 && (
+                                        <tr><td colSpan="3" className="text-center py-4 text-gray-400">Bekleyen kayıt yok</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Eğitmen Performans Raporu */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-[350px]">
+                        <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-xl flex justify-between items-center">
+                            <h3 className="text-sm font-bold text-gray-800">Eğitmen Performans Raporu</h3>
+                            <UserCheck size={16} className="text-indigo-400" />
+                        </div>
+                        <div className="flex-1 overflow-auto p-2">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr className="border-b text-gray-500">
+                                        <th className="py-2 px-2 font-semibold">Eğitmen Adı</th>
+                                        <th className="py-2 px-2 font-semibold text-center w-24">Eğitim Sayısı</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {egitmenCounts.map(([isim, count]) => (
+                                        <tr key={isim} className="border-b border-gray-50 hover:bg-gray-50">
+                                            <td className="py-2 px-2 font-medium text-gray-700">{isim}</td>
+                                            <td className="py-2 px-2 text-center">
+                                                <span className="bg-indigo-100 text-indigo-800 py-0.5 px-2 rounded-full font-bold">{count}</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grafikler (Alan ve Dal) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[350px] flex flex-col">
+                    <h3 className="text-sm font-bold text-gray-700 mb-4">Alanlara Göre Eğitim Dağılımı</h3>
+                    <div className="flex-1 relative w-full">
+                      <Bar data={alanChartData} options={{ maintainAspectRatio: false, responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }} />
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-[350px] flex flex-col">
+                    <h3 className="text-sm font-bold text-gray-700 mb-4">Dallara Göre Eğitim Dağılımı</h3>
+                    <div className="flex-1 relative w-full">
+                      <Bar data={dalChartData} options={{ maintainAspectRatio: false, responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 
+                   ÖZEL KURAL UYGULAMASI: 
+                   "Her alanı ayrı bir başlık altında raporlamak zorundadır" kuralını yerine getiren Alan Raporlama Izgarası 
+                */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-sm font-bold text-gray-700 mb-4">Alan Bazlı Detaylı Dağılım Raporu</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {Object.entries(alanStats).map(([alanAdi, stats]) => (
+                            <div key={alanAdi} className="p-3 border border-indigo-100 bg-indigo-50/30 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                                <h4 className="font-bold text-xs text-indigo-800 mb-2 border-b border-indigo-200 pb-1 h-8 overflow-hidden">{alanAdi}</h4>
+                                <div className="flex justify-between text-xs text-gray-600 mt-2">
+                                    <span className="flex flex-col items-center">Yayında <strong className="text-green-600 text-sm">{stats.yayinda}</strong></span>
+                                    <span className="flex flex-col items-center">Hazırlanan <strong className="text-orange-500 text-sm">{stats.hazirlanan}</strong></span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+            </div>
+         </div>
       </div>
+
     </div>
   );
 };
@@ -1262,8 +1460,8 @@ export default function App() {
              {new Date().toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
-          {activeTab === 'dashboard' && <div className="h-full overflow-y-auto custom-scrollbar"><DashboardPage currentUser={userRole} /></div>}
+        <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col h-full w-full">
+          {activeTab === 'dashboard' && <DashboardPage currentUser={userRole} />}
           {activeTab === 'education' && <EducationPage currentUser={userRole} />}
           {activeTab === 'filming' && <FilmingPage currentUser={userRole} />}
           {activeTab === 'editing' && <EditingPage currentUser={userRole} />}
