@@ -97,7 +97,7 @@ const LOOKUPS = {
     'Çekim Bekliyor', 'Çekimde', 'Çekim Bitti', 'Çekim Revize', 'İçerik Bitti', 'Ses Çekimi Bekleniyor',
     'İçerik Kontrolü', 'İçerik Revize', 'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'Montajda',
     'Montaj Kontrolü', 'Montaj Revize', 'ID Bekliyor', 'Yayında', 'Eğitim Beklemede', 'İptal',
-    'İYS Aşamasında', 'Animasyon Programı Bekliyor', 'Eğitmen Ayrıldı'
+    'İYS Aşamasında', 'ÖYS Aşamasında', 'Animasyon Programı Bekliyor', 'Eğitmen Ayrıldı'
   ],
   MONTAJ_SORUMLUSU: ['Ayşe Nur Yazıcı', 'Hasan Taşdemir', 'Hatice Yıkılmaz', 'Cihan Çimen'],
   CEKIM_SORUMLUSU: ['Gülnur Köse', 'Sadi Demirci', 'Soner Ulu'],
@@ -400,6 +400,36 @@ const DataTable = ({
                 ))}
             </div>
         );
+    } else if (col.type === 'dynamicHours') {
+        // Dinamik Saat Seçimi Yapısı (Seçilen Gün Sayısına Göre Üretilir)
+        const days = form[col.dependsOn] ? form[col.dependsOn].split(', ').filter(Boolean) : [];
+        if (days.length === 0) return <span className="text-gray-400 text-xs">Önce gün seçiniz</span>;
+        
+        const currentHours = form[col.key] ? form[col.key].split(', ') : [];
+        
+        return (
+            <div className="flex flex-col gap-1 w-full">
+                {days.map((day, idx) => (
+                    <div key={day} className="flex items-center gap-2">
+                        <span className="text-xs font-medium w-20 truncate" title={day}>{day}:</span>
+                        <select
+                            value={currentHours[idx] || ''}
+                            onChange={(e) => {
+                                const newArr = [...currentHours];
+                                newArr[idx] = e.target.value;
+                                setForm({ ...form, [col.key]: newArr.join(', ') });
+                            }}
+                            className="flex-1 p-1 border rounded text-xs"
+                        >
+                            <option value="">Saat Seç</option>
+                            {(col.options || []).map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    </div>
+                ))}
+            </div>
+        );
     } else if (col.type === 'date') {
       return (
         <input
@@ -460,16 +490,22 @@ const DataTable = ({
         <table className="w-full min-w-max text-left text-sm border-collapse">
           <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm text-gray-700">
             <tr>
-              <th className="p-3 border-b font-semibold w-12 text-center">#</th>
+              <th className="p-0 border-b font-semibold bg-gray-100 align-middle w-12">
+                 <div className="p-3 w-full h-full text-center flex items-center justify-center">#</div>
+              </th>
               {columns.map(col => (
                 <th 
                   key={col.key} 
-                  className={`p-3 border-b font-semibold min-w-[120px] ${col.sortable ? 'cursor-pointer hover:bg-gray-200' : ''}`}
-                  onClick={() => col.sortable && requestSort(col.key)}
+                  className="p-0 border-b font-semibold bg-gray-100 align-middle relative group"
                 >
-                  <div className="flex items-center gap-1">
-                    {col.label}
-                    {col.sortable && <ArrowUpDown size={14} className="text-gray-400" />}
+                  {/* Sütun genişletme/daraltma özelliği resize: horizontal ile verildi */}
+                  <div 
+                     style={{ resize: 'horizontal', overflow: 'hidden', minWidth: '120px', maxWidth: '400px' }}
+                     className={`p-3 flex items-center gap-1 h-full ${col.sortable ? 'cursor-pointer hover:bg-gray-200 transition-colors' : ''}`}
+                     onClick={() => col.sortable && requestSort(col.key)}
+                  >
+                    <span className="truncate">{col.label}</span>
+                    {col.sortable && <ArrowUpDown size={14} className="text-gray-400 flex-shrink-0" />}
                   </div>
                 </th>
               ))}
@@ -504,10 +540,18 @@ const DataTable = ({
                   {columns.map(col => (
                     <td key={col.key} className="p-3 align-top">
                       {isRowEditing ? renderInput(col, editForm, setEditForm) : (
-                          // Sadece notlar için TruncatedText eklendi
+                          // Notlar için daraltma/genişletme, Dinamik Saatler için özel görünüm
                           col.key === 'notlar' 
                             ? <TruncatedText text={row[col.key]} maxLength={40} />
-                            : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])
+                            : col.type === 'dynamicHours'
+                                ? (
+                                    <div className="flex flex-col gap-0.5">
+                                        {(row[col.dependsOn] ? row[col.dependsOn].split(', ').filter(Boolean) : []).map((d, i) => (
+                                            <div key={d} className="text-xs whitespace-nowrap"><span className="font-semibold">{d}:</span> {(row[col.key] || '').split(', ')[i] || '-'}</div>
+                                        ))}
+                                    </div>
+                                )
+                                : (col.type === 'date' ? formatDate(row[col.key]) : row[col.key])
                       )}
                     </td>
                   ))}
@@ -925,7 +969,7 @@ const InstructorPage = ({ currentUser }) => {
         { key: 'egitmen', label: 'Eğitmen', sortable: true },
         { key: 'alan', label: 'Alan', type: 'select', options: LOOKUPS.ALAN, sortable: true },
         { key: 'calismaGunu', label: 'Çalışma Günü', type: 'multiselect', options: LOOKUPS.CALISMA_GUNLERI },
-        { key: 'calismaSaati', label: 'Çalışma Saati', type: 'select', options: LOOKUPS.CALISMA_SAATLERI },
+        { key: 'calismaSaati', label: 'Çalışma Saati', type: 'dynamicHours', dependsOn: 'calismaGunu', options: LOOKUPS.CALISMA_SAATLERI },
         { key: 'kursMerkezi', label: 'Kurs Merkezi' }, 
         { key: 'icerikGelistirme', label: 'İçerik Geliştirme Uzmanı', type: 'select', options: LOOKUPS.ICERIK_TAKIP, sortable: true },
         { key: 'egitimTasarim', label: 'Eğitim Tasarım Uzmanı', type: 'select', options: LOOKUPS.EGITIM_TASARIM_UZMANI }
@@ -1032,17 +1076,19 @@ const DashboardPage = ({ currentUser }) => {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [currentUser]);
 
+  // ÇEKİMDEKİ EĞİTİM SAYISI HESAPLAMASI (Çekimde, Çekim Revize, Ekran Çekiminde)
   const inFilmingStatuses = ['Çekimde', 'Çekim Revize', 'Ekran Çekiminde'];
   const inFilming = eduData.filter(d => inFilmingStatuses.includes(d.durum)).length;
+  
   const inEditing = editData.filter(d => d.montajDurumu !== 'Bitti').length;
   const published = eduData.filter(d => d.durum === 'Yayında').length;
   
   const PREPARING_STATUSES = [
-    'Eğitmen İçerik Hazırlıyor', 'Ekran Çekiminde',
-    'Etkileşimli İçerik Hazırlanıyor', 'Çekim Bekliyor', 'İçerik Bitti',
+    'Eğitim Planlanıyor', 'Eğitmen İçerik Hazırlıyor', 'Ekran Çekiminde',
+    'Etkileşimli İçerik Hazırlanıyor', 'Çekim Bekliyor', 'Çekim Bitti', 'İçerik Bitti',
     'Ses Çekimi Bekleniyor', 'İçerik Kontrolü', 'İçerik Revize',
     'Montaj Sırasında', 'Etkileşimli İçerik Sırasında', 'ID Bekliyor',
-    'Yayında', 'İYS Aşamasında', 'Animasyon Programı Bekliyor'
+    'İYS Aşamasında', 'ÖYS Aşamasında', 'Animasyon Programı Bekliyor'
   ];
   const hazirlanan = eduData.filter(d => PREPARING_STATUSES.includes(d.durum)).length;
   
